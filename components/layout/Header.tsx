@@ -1,0 +1,129 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Menu, Coins, User, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ConnectWalletButton } from '@/components/ConnectWalletButton'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { LanguageToggle } from '@/components/i18n/LanguageToggle'
+import { SecurityAlertsBell } from '@/components/dashboard/SecurityAlertsBell'
+import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
+
+interface HeaderProps {
+  onMenuClick?: () => void
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
+  const [credits, setCredits] = useState<number>(0)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    async function loadUserData() {
+      const supabase = createClient()
+      
+      // Get user
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+
+      if (user) {
+        // Get credits
+        const { data: creditsData } = await supabase
+          .from('credits')
+          .select('balance')
+          .eq('user_id', user.id)
+          .single()
+
+        if (creditsData) {
+          setCredits(creditsData.balance)
+        }
+      }
+    }
+
+    loadUserData()
+
+    // Set up real-time subscription for credits
+    const supabase = createClient()
+    const channel = supabase
+      .channel('credits-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'credits',
+        },
+        (payload) => {
+          if (payload.new && 'balance' in payload.new) {
+            setCredits(payload.new.balance as number)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  return (
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-white px-4 lg:px-6">
+      {/* Mobile menu button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="lg:hidden"
+        onClick={onMenuClick}
+      >
+        <Menu className="h-6 w-6" />
+      </Button>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Quick Action - New Claim */}
+      {user && (
+        <Link href="/claims/new">
+          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white hidden sm:flex">
+            <Plus className="h-4 w-4 mr-1" />
+            New Claim
+          </Button>
+        </Link>
+      )}
+
+      {/* Credits display */}
+      {user && (
+        <Link
+          href="/settings/billing"
+          className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 transition-colors hover:bg-emerald-100"
+        >
+          <Coins className="h-4 w-4 text-emerald-600" />
+          <span className="text-sm font-semibold text-emerald-900">
+            {credits} {credits === 1 ? 'Credit' : 'Credits'}
+          </span>
+        </Link>
+      )}
+
+      {/* Security Alerts Bell */}
+      {user && <SecurityAlertsBell />}
+
+      {/* Language Toggle */}
+      <LanguageToggle />
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
+      {/* Wallet connection */}
+      <ConnectWalletButton />
+
+      {/* User menu */}
+      {user && (
+        <Link href="/settings/profile">
+          <Button variant="ghost" size="icon">
+            <User className="h-5 w-5" />
+          </Button>
+        </Link>
+      )}
+    </header>
+  )
+}
