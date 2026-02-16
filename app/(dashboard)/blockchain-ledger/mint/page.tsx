@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,15 @@ interface LandClaim {
   minted_at?: string
 }
 
-export default function MintPage() {
+export default function MintPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <MintPage />
+    </Suspense>
+  )
+}
+
+function MintPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const claimId = searchParams.get('claimId')

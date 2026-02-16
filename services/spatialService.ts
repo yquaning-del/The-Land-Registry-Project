@@ -27,6 +27,11 @@ import {
 export class SpatialConflictService {
   private supabase = createClient()
 
+  private getApiBaseUrl(): string {
+    if (typeof window !== 'undefined') return ''
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  }
+
   /**
    * Convert polygon coordinates to PostGIS WKT format
    */
@@ -200,10 +205,29 @@ export class SpatialConflictService {
       // Calculate centroid for satellite lookup
       const centroid = this.calculateCentroid(polygon.coordinates)
 
-      // In production, this would call a satellite imagery API
-      // For now, we simulate the check with mock data
-      const mockSatelliteCheck = await this.performMockSatelliteCheck(centroid)
+      try {
+        const baseUrl = this.getApiBaseUrl()
+        const res = await fetch(`${baseUrl}/api/satellite/geofence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ lat: centroid.lat, lng: centroid.lng }),
+        })
 
+        if (res.ok) {
+          const data = (await res.json()) as SatelliteGeofenceResult
+          if (data && typeof data.isValid === 'boolean') {
+            return data
+          }
+        }
+      } catch (e) {
+        // Fall back to mock check below
+      }
+
+      // In production, this would call a satellite imagery API.
+      // If satellite integration isn't configured/available, use mock behavior.
+      const mockSatelliteCheck = await this.performMockSatelliteCheck(centroid)
       return mockSatelliteCheck
     } catch (error: any) {
       console.error('Satellite geofence validation error:', error)

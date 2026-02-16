@@ -56,6 +56,11 @@ export class DeepMatchVerificationAgent {
   private readonly MEDIUM_CONFIDENCE_THRESHOLD = 0.60
   private readonly MAX_LEASE_YEARS = 99
 
+  private getApiBaseUrl(): string {
+    if (typeof window !== 'undefined') return ''
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  }
+
   async performOCRExtraction(file: File): Promise<OCRExtractionResult> {
     try {
       const text = await this.extractTextFromImage(file)
@@ -91,33 +96,31 @@ export class DeepMatchVerificationAgent {
     return new Promise((resolve, reject) => {
       reader.onload = async (e) => {
         try {
-          const imageData = e.target?.result as string
-          
-          const mockText = `
-            REPUBLIC OF GHANA
-            LANDS COMMISSION
-            
-            CERTIFICATE OF OCCUPANCY
-            
-            Serial Number: GLC/2026/001234
-            Parcel ID: GH20260001234
-            
-            This is to certify that KOFI MENSAH
-            (hereinafter called the "Grantee")
-            
-            Vendor/Grantor: GHANA LANDS COMMISSION
-            
-            Plot Number: 123
-            Location: East Legon, Accra
-            
-            Date of Issue: 15th January 2026
-            
-            Duration: 99 years from the date hereof
-            
-            [Official Seal]
-          `
-          
-          resolve(mockText)
+          const imageDataUrl = e.target?.result as string
+
+          if (!imageDataUrl) {
+            resolve('')
+            return
+          }
+
+          const baseUrl = this.getApiBaseUrl()
+          const res = await fetch(`${baseUrl}/api/ocr/extract`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ imageDataUrl }),
+          })
+
+          if (!res.ok) {
+            const errText = await res.text()
+            console.error('OCR API failed:', res.status, errText)
+            resolve('')
+            return
+          }
+
+          const data = (await res.json()) as { text?: string }
+          resolve((data.text || '').toString())
         } catch (error) {
           reject(error)
         }

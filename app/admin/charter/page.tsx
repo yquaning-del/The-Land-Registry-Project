@@ -14,7 +14,7 @@ export default async function AdminCharterPage() {
 
   return (
     <>
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           .print\\:hidden {
             display: none !important;
@@ -38,7 +38,7 @@ export default async function AdminCharterPage() {
             font-size: 11pt;
           }
         }
-      `}</style>
+      ` }} />
 
       <main className="min-h-screen bg-white">
         <div className="container mx-auto px-4 py-10 print:py-6">

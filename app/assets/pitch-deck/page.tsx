@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Navbar } from '@/components/Navbar'
@@ -43,7 +43,15 @@ type SlideId =
   | 'roadmap'
   | 'cta'
 
-export default function PitchDeckAssetPage() {
+export default function PitchDeckAssetPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <PitchDeckAssetPage />
+    </Suspense>
+  )
+}
+
+function PitchDeckAssetPage() {
   const [index, setIndex] = useState(0)
   const viewportRef = useRef<HTMLDivElement>(null)
   const isProgrammaticScrollRef = useRef(false)

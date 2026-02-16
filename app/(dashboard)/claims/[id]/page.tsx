@@ -25,6 +25,8 @@ import {
   User,
   Hash,
   Building,
+  ScrollText,
+  Ruler,
 } from 'lucide-react'
 
 interface ClaimDetails {
@@ -32,6 +34,7 @@ interface ClaimDetails {
   claimant_id: string
   original_document_url: string
   document_type: string | null
+  document_metadata: any
   gps_coordinates: string
   latitude: number
   longitude: number
@@ -51,6 +54,12 @@ interface ClaimDetails {
   grantor_type: string | null
   traditional_authority_name: string | null
   family_head_name: string | null
+  stool_land_reference: string | null
+  surveyor_license_number: string | null
+  survey_date: string | null
+  document_serial_number: string | null
+  lands_commission_file_number: string | null
+  duration_years: number | null
   created_at: string
   updated_at: string
   verification_result?: any
@@ -301,14 +310,16 @@ export default function ClaimDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
+                {claim.document_type === 'INDENTURE' ? <ScrollText className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
                 Document Information
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <div className="text-sm text-gray-600">Document Type</div>
-                <div className="font-medium">{claim.document_type || 'Not specified'}</div>
+                <div className="text-sm text-gray-600">Document Category</div>
+                <div className="font-medium">
+                  {claim.document_type === 'INDENTURE' ? 'Indenture' : claim.document_type === 'LAND_TITLE' ? 'Land Title / Certificate' : claim.document_type || 'Not specified'}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-gray-600">Title Type</div>
@@ -316,8 +327,32 @@ export default function ClaimDetailsPage() {
               </div>
               <div>
                 <div className="text-sm text-gray-600">Parcel ID</div>
-                <div className="font-medium font-mono">{claim.parcel_id_barcode || 'Not assigned'}</div>
+                <div className="font-medium font-mono">{claim.parcel_id_barcode || claim.document_metadata?.parcelId || 'Not assigned'}</div>
               </div>
+              {claim.document_metadata?.ownerName && (
+                <div>
+                  <div className="text-sm text-gray-600">Owner / Grantee</div>
+                  <div className="font-medium">{claim.document_metadata.ownerName}</div>
+                </div>
+              )}
+              {claim.document_serial_number && (
+                <div>
+                  <div className="text-sm text-gray-600">Document Serial No.</div>
+                  <div className="font-medium font-mono">{claim.document_serial_number}</div>
+                </div>
+              )}
+              {claim.lands_commission_file_number && (
+                <div>
+                  <div className="text-sm text-gray-600">Lands Commission File No.</div>
+                  <div className="font-medium font-mono">{claim.lands_commission_file_number}</div>
+                </div>
+              )}
+              {claim.duration_years && (
+                <div>
+                  <div className="text-sm text-gray-600">Duration</div>
+                  <div className="font-medium">{claim.duration_years} years</div>
+                </div>
+              )}
               {claim.original_document_url && (
                 <div>
                   <div className="text-sm text-gray-600 mb-2">Document</div>
@@ -373,8 +408,8 @@ export default function ClaimDetailsPage() {
           </Card>
         </div>
 
-        {/* Grantor Info */}
-        {(claim.grantor_type || claim.traditional_authority_name || claim.family_head_name) && (
+        {/* Grantor Info (Indenture) */}
+        {(claim.grantor_type || claim.traditional_authority_name || claim.family_head_name || claim.stool_land_reference) && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -400,6 +435,46 @@ export default function ClaimDetailsPage() {
                   <div>
                     <div className="text-sm text-gray-600">Family Head</div>
                     <div className="font-medium">{claim.family_head_name}</div>
+                  </div>
+                )}
+                {claim.stool_land_reference && (
+                  <div>
+                    <div className="text-sm text-gray-600">Stool Land Reference</div>
+                    <div className="font-medium">{claim.stool_land_reference}</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Survey Info (Indenture) */}
+        {(claim.surveyor_license_number || claim.survey_date || claim.document_metadata?.surveyorName) && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Ruler className="h-5 w-5" />
+                Survey Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {claim.document_metadata?.surveyorName && (
+                  <div>
+                    <div className="text-sm text-gray-600">Surveyor Name</div>
+                    <div className="font-medium">{claim.document_metadata.surveyorName}</div>
+                  </div>
+                )}
+                {claim.surveyor_license_number && (
+                  <div>
+                    <div className="text-sm text-gray-600">License Number</div>
+                    <div className="font-medium font-mono">{claim.surveyor_license_number}</div>
+                  </div>
+                )}
+                {claim.survey_date && (
+                  <div>
+                    <div className="text-sm text-gray-600">Survey Date</div>
+                    <div className="font-medium">{new Date(claim.survey_date).toLocaleDateString()}</div>
                   </div>
                 )}
               </div>

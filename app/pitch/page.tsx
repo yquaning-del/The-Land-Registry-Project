@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -58,7 +58,15 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-export default function PitchPage() {
+export default function PitchPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <PitchPage />
+    </Suspense>
+  )
+}
+
+function PitchPage() {
   const [index, setIndex] = useState(0)
   const [requestOpen, setRequestOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)

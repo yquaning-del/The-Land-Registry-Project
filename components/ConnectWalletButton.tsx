@@ -12,6 +12,10 @@ const wallets = [
 ]
 
 export function ConnectWalletButton() {
+  if (!client) {
+    return null
+  }
+
   return (
     <ConnectButton
       client={client}

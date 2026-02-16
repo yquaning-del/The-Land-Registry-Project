@@ -12,7 +12,31 @@ type LandClaim = {
   claimant_name?: string | null
   grantor_name?: string | null
   polygon_coordinates?: any
+  title_type?: string | null
+  document_type?: string | null
   [key: string]: any
+}
+
+function mapAIDocTypeToTitleType(aiDocType: string): string | null {
+  const n = aiDocType.toLowerCase().trim()
+  if (/stool\s*indenture/.test(n)) return 'STOOL_INDENTURE'
+  if (/family\s*indenture/.test(n)) return 'FAMILY_INDENTURE'
+  if (/customary\s*freehold/.test(n)) return 'CUSTOMARY_FREEHOLD'
+  if (/indenture|plan\s*of\s*land/.test(n)) return 'STOOL_INDENTURE'
+  if (/certificate\s*of\s*occupancy/.test(n)) return 'CERTIFICATE_OF_OCCUPANCY'
+  if (/governor.?s?\s*consent/.test(n)) return 'GOVERNOR_CONSENT'
+  if (/deed\s*of\s*assignment/.test(n)) return 'DEED_OF_ASSIGNMENT'
+  if (/freehold/.test(n)) return 'FREEHOLD'
+  if (/leasehold|lease/.test(n)) return 'LEASEHOLD'
+  if (/land\s*title|land\s*certificate/.test(n)) return 'FREEHOLD'
+  return null
+}
+
+function mapAIDocTypeToCategory(aiDocType: string): string | null {
+  const n = aiDocType.toLowerCase().trim()
+  if (/indenture|plan\s*of\s*land|customary\s*freehold/.test(n)) return 'INDENTURE'
+  if (/certificate|deed|consent|freehold|leasehold|land\s*title/.test(n)) return 'LAND_TITLE'
+  return null
 }
 
 // POST - Start verification for a claim
@@ -80,22 +104,37 @@ export async function POST(request: NextRequest) {
       newStatus = 'PENDING_HUMAN_REVIEW'
     }
 
+    // Map AI-detected document type to title_type enum if not already set
+    const aiDetectedType = result.documentAnalysis?.documentType
+    const updatePayload: Record<string, any> = {
+      ai_verification_status: newStatus,
+      ai_confidence_score: result.overallConfidence,
+      ai_confidence_level: result.confidenceLevel,
+      ai_verification_metadata: {
+        ...result,
+        aiPowered: result.aiPowered,
+        reasoning: result.reasoning,
+        fraudDetection: result.fraudDetection,
+        tamperingAnalysis: result.tamperingAnalysis,
+      },
+      ai_verified_at: newStatus === 'AI_VERIFIED' ? new Date().toISOString() : null,
+    }
+
+    if (aiDetectedType) {
+      if (!claimData.title_type) {
+        const mappedTitleType = mapAIDocTypeToTitleType(aiDetectedType)
+        if (mappedTitleType) updatePayload.title_type = mappedTitleType
+      }
+      if (!claimData.document_type) {
+        const mappedCategory = mapAIDocTypeToCategory(aiDetectedType)
+        if (mappedCategory) updatePayload.document_type = mappedCategory
+      }
+    }
+
     // Update claim with verification results
     const { error: updateError } = await supabase
       .from('land_claims')
-      .update({
-        ai_verification_status: newStatus,
-        ai_confidence_score: result.overallConfidence,
-        ai_confidence_level: result.confidenceLevel,
-        ai_verification_metadata: {
-          ...result,
-          aiPowered: result.aiPowered,
-          reasoning: result.reasoning,
-          fraudDetection: result.fraudDetection,
-          tamperingAnalysis: result.tamperingAnalysis,
-        },
-        ai_verified_at: newStatus === 'AI_VERIFIED' ? new Date().toISOString() : null,
-      } as any)
+      .update(updatePayload as any)
       .eq('id', claimId)
 
     if (updateError) {

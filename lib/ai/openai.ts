@@ -51,15 +51,21 @@ export async function analyzeDocumentWithGPT4(
         role: 'system',
         content: `You are an expert document analyst specializing in West African land documents, particularly from Ghana, Nigeria, and other ECOWAS countries. Your task is to:
 
-1. Extract key information from land documents (titles, indentures, certificates of occupancy)
-2. Identify the document type
-3. Extract grantor/grantee names, parcel IDs, plot numbers, locations, dates
-4. Assess document authenticity based on formatting, language, and official markers
-5. Flag any potential fraud indicators
+1. Identify the document type — distinguish clearly between:
+   - **Indentures** (Stool Indenture, Family Indenture): private conveyance documents with survey plans, grantor/grantee details, witness signatures, and traditional authority consent. Often include a "PLAN OF LAND" with locality, district, region, surveyor certification, area, and grid coordinates.
+   - **Land Titles / Certificates** (Certificate of Occupancy, Freehold, Leasehold, Deed of Assignment): government-issued documents with official seals, serial numbers, Lands Commission references, and registration stamps.
+2. Extract key information: grantor/grantee names, parcel IDs, plot numbers, locations, dates, surveyor details
+3. Assess document authenticity based on formatting, language, and official markers:
+   - For **Indentures**: verify presence of surveyor certification and license number, witness signatures, traditional authority stamps/seals, proper "PLAN OF LAND" format with locality/district/region, area calculation, and grid coordinates
+   - For **Land Titles**: verify government seals, serial numbers, Lands Commission file references, registration stamps, and proper legal language
+4. Flag any potential fraud indicators
+
+For documentType, use one of these exact values when possible:
+- "Stool Indenture", "Family Indenture", "Certificate of Occupancy", "Freehold", "Leasehold", "Governor's Consent", "Deed of Assignment", "Customary Freehold"
 
 Respond in JSON format with the following structure:
 {
-  "documentType": "string (e.g., 'Certificate of Occupancy', 'Land Title', 'Indenture')",
+  "documentType": "string (use exact values listed above)",
   "grantorName": "string or null",
   "granteeName": "string or null", 
   "parcelId": "string or null",

@@ -12,17 +12,24 @@ import {
   AlertTriangle, 
   Eye,
   Upload,
-  MapPin
+  MapPin,
+  ScrollText
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface LandClaim {
   id: string
   parcel_id: string
+  parcel_id_barcode: string | null
   owner_name: string
   location: string
   status: string
   verification_status: string
+  ai_verification_status: string
+  document_type: string | null
+  title_type: string | null
+  address: string | null
+  document_metadata: any
   created_at: string
   original_document_url: string
 }
@@ -31,10 +38,11 @@ export default function ClaimsPage() {
   const [claims, setClaims] = useState<LandClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
 
   useEffect(() => {
     loadClaims()
-  }, [filter])
+  }, [filter, typeFilter])
 
   const loadClaims = async () => {
     setLoading(true)
@@ -47,11 +55,17 @@ export default function ClaimsPage() {
       let query = supabase
         .from('land_claims')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('claimant_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (filter !== 'all') {
-        query = query.eq('verification_status', filter)
+      if (filter === 'VERIFIED') {
+        query = query.in('ai_verification_status', ['AI_VERIFIED', 'APPROVED'])
+      } else if (filter !== 'all') {
+        query = query.eq('ai_verification_status', filter)
+      }
+
+      if (typeFilter !== 'all') {
+        query = query.eq('document_type', typeFilter)
       }
 
       const { data, error } = await query
@@ -67,15 +81,39 @@ export default function ClaimsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'VERIFIED':
+      case 'AI_VERIFIED':
+      case 'APPROVED':
         return <Badge className="bg-emerald-500">Verified</Badge>
-      case 'PENDING':
+      case 'PENDING_VERIFICATION':
         return <Badge className="bg-yellow-500">Pending</Badge>
+      case 'PENDING_HUMAN_REVIEW':
+        return <Badge className="bg-blue-500">Human Review</Badge>
+      case 'REJECTED':
       case 'DISPUTED':
         return <Badge className="bg-red-500">Disputed</Badge>
       default:
         return <Badge className="bg-gray-500">{status}</Badge>
     }
+  }
+
+  const getDocTypeBadge = (claim: LandClaim) => {
+    if (claim.document_type === 'INDENTURE') {
+      return (
+        <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50 text-xs">
+          <ScrollText className="h-3 w-3 mr-1" />
+          Indenture
+        </Badge>
+      )
+    }
+    if (claim.document_type === 'LAND_TITLE') {
+      return (
+        <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50 text-xs">
+          <FileText className="h-3 w-3 mr-1" />
+          Land Title
+        </Badge>
+      )
+    }
+    return null
   }
 
   return (
@@ -85,7 +123,7 @@ export default function ClaimsPage() {
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold text-navy-900 mb-2">My Land Claims</h1>
-            <p className="text-gray-600">Manage and track your land title verification claims</p>
+            <p className="text-gray-600">Manage and track your land verification claims</p>
           </div>
           <Link href="/dashboard/claims/new">
             <Button className="bg-emerald-600 hover:bg-emerald-700">
@@ -114,7 +152,7 @@ export default function ClaimsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-yellow-600">
-                {claims.filter(c => c.verification_status === 'PENDING').length}
+                {claims.filter(c => c.ai_verification_status === 'PENDING_VERIFICATION').length}
               </div>
             </CardContent>
           </Card>
@@ -126,7 +164,7 @@ export default function ClaimsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-emerald-600">
-                {claims.filter(c => c.verification_status === 'VERIFIED').length}
+                {claims.filter(c => c.ai_verification_status === 'AI_VERIFIED' || c.ai_verification_status === 'APPROVED').length}
               </div>
             </CardContent>
           </Card>
@@ -138,7 +176,7 @@ export default function ClaimsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-red-600">
-                {claims.filter(c => c.verification_status === 'DISPUTED').length}
+                {claims.filter(c => c.ai_verification_status === 'REJECTED' || c.ai_verification_status === 'DISPUTED').length}
               </div>
             </CardContent>
           </Card>
@@ -148,33 +186,62 @@ export default function ClaimsPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Filter Claims</CardTitle>
-            <CardDescription>View claims by verification status</CardDescription>
+            <CardDescription>View claims by status or document type</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <Button
                 variant={filter === 'all' ? 'default' : 'outline'}
                 onClick={() => setFilter('all')}
+                size="sm"
               >
-                All Claims
+                All Statuses
               </Button>
               <Button
-                variant={filter === 'PENDING' ? 'default' : 'outline'}
-                onClick={() => setFilter('PENDING')}
+                variant={filter === 'PENDING_VERIFICATION' ? 'default' : 'outline'}
+                onClick={() => setFilter('PENDING_VERIFICATION')}
+                size="sm"
               >
                 Pending
               </Button>
               <Button
                 variant={filter === 'VERIFIED' ? 'default' : 'outline'}
                 onClick={() => setFilter('VERIFIED')}
+                size="sm"
               >
                 Verified
               </Button>
               <Button
-                variant={filter === 'DISPUTED' ? 'default' : 'outline'}
-                onClick={() => setFilter('DISPUTED')}
+                variant={filter === 'REJECTED' ? 'default' : 'outline'}
+                onClick={() => setFilter('REJECTED')}
+                size="sm"
               >
-                Disputed
+                Rejected
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={typeFilter === 'all' ? 'default' : 'outline'}
+                onClick={() => setTypeFilter('all')}
+                size="sm"
+              >
+                All Types
+              </Button>
+              <Button
+                variant={typeFilter === 'LAND_TITLE' ? 'default' : 'outline'}
+                onClick={() => setTypeFilter('LAND_TITLE')}
+                size="sm"
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Land Titles
+              </Button>
+              <Button
+                variant={typeFilter === 'INDENTURE' ? 'default' : 'outline'}
+                onClick={() => setTypeFilter('INDENTURE')}
+                size="sm"
+              >
+                <ScrollText className="h-3 w-3 mr-1" />
+                Indentures
               </Button>
             </div>
           </CardContent>
@@ -207,21 +274,32 @@ export default function ClaimsPage() {
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-lg">{claim.parcel_id}</CardTitle>
+                      <CardTitle className="text-lg">
+                        {claim.document_metadata?.parcelId || claim.parcel_id_barcode || claim.address || 'Untitled Claim'}
+                      </CardTitle>
                       <CardDescription className="flex items-center gap-1 mt-1">
                         <MapPin className="h-3 w-3" />
-                        {claim.location}
+                        {claim.address || claim.document_metadata?.district || 'No location'}
                       </CardDescription>
                     </div>
-                    {getStatusBadge(claim.verification_status)}
+                    <div className="flex flex-col items-end gap-1">
+                      {getStatusBadge(claim.ai_verification_status)}
+                      {getDocTypeBadge(claim)}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm text-gray-600">Owner</p>
-                      <p className="font-medium">{claim.owner_name}</p>
+                      <p className="font-medium">{claim.document_metadata?.ownerName || 'Not specified'}</p>
                     </div>
+                    {claim.title_type && (
+                      <div>
+                        <p className="text-sm text-gray-600">Title Type</p>
+                        <p className="text-sm">{claim.title_type.replace(/_/g, ' ')}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-sm text-gray-600">Submitted</p>
                       <p className="text-sm">{new Date(claim.created_at).toLocaleDateString()}</p>
@@ -233,7 +311,7 @@ export default function ClaimsPage() {
                           View
                         </Button>
                       </Link>
-                      {claim.verification_status === 'VERIFIED' && (
+                      {(claim.ai_verification_status === 'AI_VERIFIED' || claim.ai_verification_status === 'APPROVED') && (
                         <Link href={`/dashboard/blockchain-ledger/mint?claimId=${claim.id}`}>
                           <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
                             Mint NFT

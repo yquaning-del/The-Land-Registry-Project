@@ -114,6 +114,7 @@ function getAIResponse(message: string): string {
 
 export function AIChatbox() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -130,6 +131,10 @@ export function AIChatbox() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
@@ -264,10 +269,12 @@ export function AIChatbox() {
                     message.role === 'user' ? 'text-white/70' : 'text-gray-400'
                   )}
                 >
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {isMounted
+                    ? message.timestamp.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : null}
                 </p>
               </div>
             </div>
