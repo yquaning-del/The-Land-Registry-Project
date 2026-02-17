@@ -384,18 +384,6 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
               <Home className="h-4 w-4" />
               <span>Home</span>
             </Link>
-            <Link href="/dashboard">
-              <Button variant="ghost" className="w-full justify-start">
-                <Home className="h-4 w-4 mr-2" />
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/dashboard/setup">
-              <Button variant="ghost" className="w-full justify-start">
-                <Settings className="h-4 w-4 mr-2" />
-                Setup
-              </Button>
-            </Link>
             <button
               onClick={handleLogout}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-navy-800/50 hover:bg-navy-800 rounded-lg transition-colors"

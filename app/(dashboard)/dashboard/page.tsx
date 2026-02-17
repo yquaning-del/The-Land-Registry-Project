@@ -26,49 +26,56 @@ export default function DashboardPage() {
   }, [])
 
   async function loadDashboardData() {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (user) {
-      // Get user profile for name
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single()
-      
-      const profileData = profile as { full_name?: string } | null
-      setUserName(profileData?.full_name || user.email?.split('@')[0] || 'User')
-
-      // Load claims
-      const { data: claims } = await supabase
-        .from('land_claims')
-        .select('*')
-        .eq('claimant_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (claims && claims.length > 0) {
-        setActivities(claims.slice(0, 10))
-        setIsNewUser(false)
+      if (user) {
+        // Get user profile for name
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single()
         
-        // Find most recent active claim (not minted yet)
-        const active = claims.find((c: any) => 
-          c.mint_status !== 'MINTED' && 
-          c.ai_verification_status !== 'REJECTED'
-        )
-        if (active) {
-          setActiveClaim(active)
+        const profileData = profile as { full_name?: string } | null
+        setUserName(profileData?.full_name || user.email?.split('@')[0] || 'User')
+
+        // Load claims
+        const { data: claims } = await supabase
+          .from('land_claims')
+          .select('*')
+          .eq('claimant_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (claims && claims.length > 0) {
+          setActivities(claims.slice(0, 10))
+          setIsNewUser(false)
+          
+          // Find most recent active claim (not minted yet)
+          const active = claims.find((c: any) => 
+            c.mint_status !== 'MINTED' && 
+            c.ai_verification_status !== 'REJECTED'
+          )
+          if (active) {
+            setActiveClaim(active)
+          }
+          
+          // Check for any conflicts
+          const conflicted = claims.some((c: any) => 
+            c.spatial_conflict_status === 'POTENTIAL_DISPUTE' || 
+            c.spatial_conflict_status === 'HIGH_RISK'
+          )
+          setHasConflicts(conflicted)
+        } else {
+          setIsNewUser(true)
         }
-        
-        // Check for any conflicts
-        const conflicted = claims.some((c: any) => 
-          c.spatial_conflict_status === 'POTENTIAL_DISPUTE' || 
-          c.spatial_conflict_status === 'HIGH_RISK'
-        )
-        setHasConflicts(conflicted)
       } else {
         setIsNewUser(true)
       }
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+      setIsNewUser(true)
     }
 
     setLoading(false)

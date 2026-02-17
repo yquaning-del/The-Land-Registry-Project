@@ -19,50 +19,67 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
+    let channel: any = null
+    let supabaseInstance: any = null
+
     async function loadUserData() {
-      const supabase = createClient()
+      try {
+        supabaseInstance = createClient()
+      } catch (e) {
+        console.error('Supabase not configured:', e)
+        return
+      }
       
-      // Get user
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        const { data: { user } } = await supabaseInstance.auth.getUser()
+        setUser(user)
 
-      if (user) {
-        // Get credits
-        const { data: creditsData } = await supabase
-          .from('credits')
-          .select('balance')
-          .eq('user_id', user.id)
-          .single()
+        if (user) {
+          // Get credits from credits table
+          const { data: creditsData } = await supabaseInstance
+            .from('credits')
+            .select('balance')
+            .eq('user_id', user.id)
+            .single()
 
-        if (creditsData) {
-          setCredits(creditsData.balance)
+          if (creditsData) {
+            setCredits(creditsData.balance)
+          }
         }
+      } catch (e) {
+        console.error('Error loading user data:', e)
       }
     }
 
     loadUserData()
 
     // Set up real-time subscription for credits
-    const supabase = createClient()
-    const channel = supabase
-      .channel('credits-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'credits',
-        },
-        (payload) => {
-          if (payload.new && 'balance' in payload.new) {
-            setCredits(payload.new.balance as number)
+    try {
+      if (!supabaseInstance) supabaseInstance = createClient()
+      channel = supabaseInstance
+        .channel('credits-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'credits',
+          },
+          (payload: any) => {
+            if (payload.new && 'balance' in payload.new) {
+              setCredits(payload.new.balance as number)
+            }
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe()
+    } catch (e) {
+      console.error('Error setting up realtime:', e)
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel && supabaseInstance) {
+        supabaseInstance.removeChannel(channel)
+      }
     }
   }, [])
 

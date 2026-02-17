@@ -11,23 +11,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get balance using RPC function
-    const { data: balance, error: balanceError } = await supabase.rpc('get_credit_balance', {
-      p_user_id: user.id,
-    } as any)
+    // Primary: read from credits table
+    const { data: creditsRow, error: creditsError } = await supabase
+      .from('credits')
+      .select('balance')
+      .eq('user_id', user.id)
+      .single()
 
-    if (balanceError) {
-      console.error('Balance error:', balanceError)
-      // Fallback to direct query
-      const { data: userData } = await supabase
-        .from('users')
-        .select('credits')
-        .eq('id', user.id)
-        .single()
+    let balance = 0
 
-      return NextResponse.json({
-        balance: userData?.credits || 0,
-      })
+    if (!creditsError && creditsRow) {
+      balance = creditsRow.balance
+    } else {
+      // Fallback: try RPC function
+      const { data: rpcBalance, error: rpcError } = await supabase.rpc('get_credit_balance', {
+        p_user_id: user.id,
+      } as any)
+
+      if (!rpcError && rpcBalance !== null) {
+        balance = rpcBalance as number
+      } else {
+        console.error('Balance error:', creditsError, rpcError)
+      }
     }
 
     // Get subscription info

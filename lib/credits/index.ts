@@ -4,17 +4,28 @@ import { CREDIT_COSTS } from '@/types/paystack.types'
 export async function getCreditBalance(userId: string): Promise<number> {
   const supabase = createClient()
   
+  // Primary: read from credits table
   const { data, error } = await supabase
     .from('credits')
     .select('balance')
     .eq('user_id', userId)
     .single()
 
-  if (error || !data) {
-    return 0
+  if (!error && data) {
+    return data.balance
   }
 
-  return data.balance
+  // Fallback: try RPC
+  const { data: rpcBalance, error: rpcError } = await supabase.rpc('get_credit_balance', {
+    p_user_id: userId,
+  } as any)
+
+  if (!rpcError && rpcBalance !== null) {
+    return rpcBalance as number
+  }
+
+  console.error('Failed to get credit balance:', error, rpcError)
+  return 0
 }
 
 export async function checkCredits(userId: string, required: number = 1): Promise<boolean> {
@@ -34,8 +45,8 @@ export async function deductCreditsForVerification(
     p_amount: CREDIT_COSTS.VERIFICATION,
     p_type: 'VERIFICATION',
     p_description: description,
-    p_reference_id: referenceId,
-  })
+    p_reference_id: referenceId || null,
+  } as any)
 
   if (error) {
     console.error('Failed to deduct verification credits:', error)
@@ -57,8 +68,8 @@ export async function deductCreditsForMint(
     p_amount: CREDIT_COSTS.MINT,
     p_type: 'MINT',
     p_description: description,
-    p_reference_id: referenceId,
-  })
+    p_reference_id: referenceId || null,
+  } as any)
 
   if (error) {
     console.error('Failed to deduct mint credits:', error)
@@ -80,8 +91,8 @@ export async function deductCredits(
     p_user_id: userId,
     p_amount: amount,
     p_description: description,
-    p_reference_id: referenceId,
-  })
+    p_reference_id: referenceId || null,
+  } as any)
 
   if (error) {
     console.error('Failed to deduct credits:', error)
@@ -100,13 +111,18 @@ export async function addCredits(
 ): Promise<void> {
   const supabase = createClient()
 
-  await supabase.rpc('add_credits', {
+  const { error } = await supabase.rpc('add_credits', {
     p_user_id: userId,
     p_amount: amount,
     p_type: type,
     p_description: description,
-    p_reference_id: referenceId,
-  })
+    p_reference_id: referenceId || null,
+  } as any)
+
+  if (error) {
+    console.error('Failed to add credits:', error)
+    throw error
+  }
 }
 
 export async function getCreditTransactions(userId: string, limit: number = 10) {

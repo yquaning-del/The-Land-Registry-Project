@@ -3,9 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import crypto from 'crypto'
 import { PAYSTACK_PLANS, PaystackPlanType } from '@/types/paystack.types'
 
-const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY!
-
 export async function POST(request: NextRequest) {
+  const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY
+  if (!paystackSecretKey) {
+    return NextResponse.json(
+      { error: 'Paystack not configured' },
+      { status: 503 }
+    )
+  }
+
   const body = await request.text()
   const signature = request.headers.get('x-paystack-signature')
 

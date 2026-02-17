@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 const PINATA_API_URL = 'https://api.pinata.cloud'
+
+function isPinataConfigured(): boolean {
+  return !!(process.env.PINATA_JWT || (process.env.PINATA_API_KEY && process.env.PINATA_API_SECRET))
+}
 
 function getPinataAuthHeaders(): HeadersInit {
   const pinataJWT = process.env.PINATA_JWT
@@ -21,6 +26,76 @@ function getPinataAuthHeaders(): HeadersInit {
   throw new Error('Pinata credentials not configured')
 }
 
+async function uploadToPinata(file: File) {
+  const upstream = new FormData()
+  upstream.append('file', file, file.name)
+
+  const metadata = JSON.stringify({ name: file.name })
+  upstream.append('pinataMetadata', metadata)
+
+  const options = JSON.stringify({ cidVersion: 1 })
+  upstream.append('pinataOptions', options)
+
+  const res = await fetch(`${PINATA_API_URL}/pinning/pinFileToIPFS`, {
+    method: 'POST',
+    headers: getPinataAuthHeaders(),
+    body: upstream,
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Pinata upload failed: ${res.status} ${text}`)
+  }
+
+  const json = (await res.json()) as { IpfsHash?: string }
+  if (!json.IpfsHash) {
+    throw new Error('Pinata response missing IpfsHash')
+  }
+
+  const ipfsHash = json.IpfsHash
+  return {
+    ipfsHash,
+    ipfsUrl: `ipfs://${ipfsHash}`,
+    pinataUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+  }
+}
+
+async function uploadToSupabaseStorage(file: File) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('User not authenticated')
+  }
+
+  const ext = file.name.split('.').pop() || 'bin'
+  const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const { data, error } = await supabase.storage
+    .from('land-documents')
+    .upload(fileName, buffer, {
+      contentType: file.type,
+      upsert: false,
+    })
+
+  if (error) {
+    throw new Error(`Supabase Storage upload failed: ${error.message}`)
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('land-documents')
+    .getPublicUrl(data.path)
+
+  return {
+    ipfsHash: null,
+    ipfsUrl: null,
+    pinataUrl: urlData.publicUrl,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const form = await request.formData()
@@ -30,41 +105,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 })
     }
 
-    const upstream = new FormData()
-    upstream.append('file', file, file.name)
+    // Try Pinata first, fall back to Supabase Storage
+    if (isPinataConfigured()) {
+      try {
+        const result = await uploadToPinata(file)
+        return NextResponse.json(result)
+      } catch (pinataError: any) {
+        console.error('Pinata upload failed, trying Supabase Storage fallback:', pinataError.message)
+      }
+    }
 
-    const metadata = JSON.stringify({ name: file.name })
-    upstream.append('pinataMetadata', metadata)
-
-    const options = JSON.stringify({ cidVersion: 1 })
-    upstream.append('pinataOptions', options)
-
-    const res = await fetch(`${PINATA_API_URL}/pinning/pinFileToIPFS`, {
-      method: 'POST',
-      headers: getPinataAuthHeaders(),
-      body: upstream,
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
+    // Fallback: Supabase Storage
+    try {
+      const result = await uploadToSupabaseStorage(file)
+      return NextResponse.json(result)
+    } catch (storageError: any) {
       return NextResponse.json(
-        { error: `Pinata upload failed: ${res.status} ${text}` },
-        { status: 502 }
+        { error: `Upload failed: ${storageError.message}. Configure PINATA_JWT or create a 'land-documents' Supabase Storage bucket.` },
+        { status: 500 }
       )
     }
-
-    const json = (await res.json()) as { IpfsHash?: string }
-    if (!json.IpfsHash) {
-      return NextResponse.json({ error: 'Pinata response missing IpfsHash' }, { status: 502 })
-    }
-
-    const ipfsHash = json.IpfsHash
-
-    return NextResponse.json({
-      ipfsHash,
-      ipfsUrl: `ipfs://${ipfsHash}`,
-      pinataUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-    })
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || 'Upload failed' },

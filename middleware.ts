@@ -4,6 +4,15 @@ import { NextResponse, type NextRequest } from 'next/server'
 const PLATFORM_OWNER_EMAIL = 'yquaning@gmail.com'
 
 export async function middleware(request: NextRequest) {
+  // Skip middleware if Supabase is not configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('Supabase not configured — middleware skipping auth checks')
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -11,8 +20,8 @@ export async function middleware(request: NextRequest) {
   })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
@@ -56,40 +65,49 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
 
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith('/admin')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/sign-in', request.url))
-    }
+    // Protect admin routes
+    if (request.nextUrl.pathname.startsWith('/admin')) {
+      if (!user) {
+        return NextResponse.redirect(new URL('/sign-in', request.url))
+      }
 
-    // Check if user is platform owner or has admin role
-    const isPlatformOwner = user.email === PLATFORM_OWNER_EMAIL
-    
-    if (!isPlatformOwner) {
-      // Check database role
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+      // Check if user is platform owner or has admin role
+      const isPlatformOwner = user.email === PLATFORM_OWNER_EMAIL
+      
+      if (!isPlatformOwner) {
+        // Check database role — handle missing profile gracefully
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
 
-      const isAdmin = profile?.role === 'ADMIN' || 
-                      profile?.role === 'SUPER_ADMIN' || 
-                      profile?.role === 'PLATFORM_OWNER'
+        if (profileError) {
+          console.warn('Could not fetch user profile for admin check:', profileError.message)
+        }
 
-      if (!isAdmin) {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
+        const isAdmin = profile?.role === 'ADMIN' || 
+                        profile?.role === 'SUPER_ADMIN' || 
+                        profile?.role === 'PLATFORM_OWNER'
+
+        if (!isAdmin) {
+          return NextResponse.redirect(new URL('/dashboard', request.url))
+        }
       }
     }
-  }
 
-  // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/sign-in', request.url))
+    // Protect dashboard routes
+    if (request.nextUrl.pathname.startsWith('/dashboard')) {
+      if (!user) {
+        return NextResponse.redirect(new URL('/sign-in', request.url))
+      }
     }
+  } catch (error) {
+    console.error('Middleware auth error:', error)
+    // On error, allow the request through rather than creating a redirect loop
   }
 
   return response

@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { paystack } from '@/lib/paystack/client'
+import { paystack, isPaystackConfigured } from '@/lib/paystack/client'
 import { createClient } from '@/lib/supabase/server'
 import { PAYSTACK_PLANS, PaystackPlanType } from '@/types/paystack.types'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isPaystackConfigured() || !paystack) {
+      return NextResponse.json(
+        { error: 'Billing is not configured. Please set PAYSTACK_SECRET_KEY.' },
+        { status: 503 }
+      )
+    }
+
     const { planType } = await request.json() as { planType: PaystackPlanType }
 
     if (!planType || !['STARTER', 'PROFESSIONAL', 'ENTERPRISE'].includes(planType)) {

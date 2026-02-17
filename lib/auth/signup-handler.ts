@@ -1,37 +1,51 @@
 import { createClient } from '@/lib/supabase/client'
-import { addCredits } from '@/lib/credits'
 
+/**
+ * Ensures user profile and credits exist after signup.
+ * DB triggers (handle_new_user_profile + ensure_credits_on_signup) handle
+ * the initial creation automatically. This function is a safety net that
+ * updates the full_name if the trigger used an empty string.
+ */
 export async function handleUserSignup(userId: string, email: string, fullName: string) {
   try {
-    // Create user profile
     const supabase = createClient()
+
+    // Update user_profiles with full_name (trigger may have set it to empty)
     const { error: profileError } = await supabase
       .from('user_profiles')
       .upsert({
         id: userId,
         full_name: fullName,
-        email: email,
         role: 'CLAIMANT',
-        country_code: 'GH', // Default to Ghana
-      })
+        country_code: 'GH',
+      }, { onConflict: 'id' })
 
     if (profileError) {
-      console.error('Error creating user profile:', profileError)
-      return false
+      console.error('Error upserting user profile:', profileError)
+      // Don't fail — the trigger may have already created it
     }
 
-    // Grant initial credits for new users
-    try {
-      await addCredits(
-        userId,
-        5, // 5 free credits for new users
-        'BONUS',
-        'Welcome bonus - 5 free credits to get started'
-      )
-      console.log('Granted 5 initial credits to new user:', userId)
-    } catch (creditError) {
-      console.error('Error granting initial credits:', creditError)
-      // Don't fail the signup if credit grant fails
+    // Ensure credits row exists (trigger should have created it)
+    const { data: creditsData } = await supabase
+      .from('credits')
+      .select('balance')
+      .eq('user_id', userId)
+      .single()
+
+    if (!creditsData) {
+      // Trigger didn't fire or credits table missing — insert directly
+      const { error: creditError } = await supabase
+        .from('credits')
+        .upsert({
+          user_id: userId,
+          balance: 5,
+          total_purchased: 0,
+          total_used: 0,
+        }, { onConflict: 'user_id' })
+
+      if (creditError) {
+        console.error('Error ensuring credits:', creditError)
+      }
     }
 
     return true
