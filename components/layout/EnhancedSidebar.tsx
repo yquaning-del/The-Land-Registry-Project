@@ -25,6 +25,7 @@ import {
   User as UserIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -44,6 +45,12 @@ const navItems: NavItem[] = [
     href: '/dashboard',
     icon: LayoutDashboard,
     description: 'Dashboard home and statistics',
+  },
+  {
+    title: 'Setup',
+    href: '/dashboard/setup',
+    icon: Settings,
+    description: 'Platform configuration and getting started',
   },
   {
     title: 'Land Claims',
@@ -376,6 +383,18 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
             >
               <Home className="h-4 w-4" />
               <span>Home</span>
+            </Link>
+            <Link href="/dashboard">
+              <Button variant="ghost" className="w-full justify-start">
+                <Home className="h-4 w-4 mr-2" />
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/dashboard/setup">
+              <Button variant="ghost" className="w-full justify-start">
+                <Settings className="h-4 w-4 mr-2" />
+                Setup
+              </Button>
             </Link>
             <button
               onClick={handleLogout}

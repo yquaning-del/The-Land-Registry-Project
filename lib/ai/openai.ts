@@ -1,5 +1,7 @@
 // OpenAI Integration for Document Analysis and Fraud Detection
 
+import { runDemoVerification } from './demo-verification'
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 if (!OPENAI_API_KEY) {
@@ -385,29 +387,23 @@ Respond in JSON:
 
 // Fallback functions when OpenAI is not available
 function getFallbackAnalysis(text: string): AIDocumentAnalysis {
-  // Basic regex extraction as fallback
-  const grantorMatch = text.match(/(?:Grantor|Vendor|Owner)[\s:]+([A-Z][A-Za-z\s.]+?)(?:\n|$)/i)
-  const granteeMatch = text.match(/(?:Grantee|Buyer|Purchaser)[\s:]+([A-Z][A-Za-z\s.]+?)(?:\n|$)/i)
-  const parcelMatch = text.match(/Parcel\s+(?:ID|Number)[\s:]+([A-Z0-9]+)/i)
-  const plotMatch = text.match(/Plot\s+(?:Number|No\.?)[\s:]+(\d+)/i)
-  const dateMatch = text.match(/Date\s+of\s+Issue[\s:]+(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})/i)
-
+  const demoResult = runDemoVerification(text)
+  
   return {
-    documentType: text.includes('CERTIFICATE') ? 'Certificate of Occupancy' : 
-                  text.includes('INDENTURE') ? 'Indenture' : 'Land Title',
-    grantorName: grantorMatch?.[1]?.trim() || null,
-    granteeName: granteeMatch?.[1]?.trim() || null,
-    parcelId: parcelMatch?.[1] || null,
-    plotNumber: plotMatch?.[1] || null,
-    location: null,
-    issueDate: dateMatch?.[1] || null,
+    documentType: demoResult.documentType,
+    grantorName: demoResult.grantorName,
+    granteeName: demoResult.granteeName,
+    parcelId: demoResult.parcelId,
+    plotNumber: demoResult.parcelId,
+    location: demoResult.location,
+    issueDate: null,
     expiryDate: null,
     durationYears: null,
-    extractedText: text.substring(0, 500),
-    confidence: 0.6,
-    isAuthentic: true,
-    fraudIndicators: [],
-    reasoning: 'Fallback analysis - OpenAI not available. Basic regex extraction used.'
+    extractedText: demoResult.extractedText,
+    confidence: demoResult.confidence,
+    isAuthentic: demoResult.isAuthentic,
+    fraudIndicators: demoResult.fraudIndicators,
+    reasoning: demoResult.reasoning
   }
 }
 

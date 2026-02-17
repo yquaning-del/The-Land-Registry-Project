@@ -7,6 +7,7 @@ import { ActivityTable } from '@/components/dashboard/ActivityTable'
 import { LiveLedger } from '@/components/dashboard/LiveLedger'
 import { AnalyticsCharts } from '@/components/dashboard/AnalyticsCharts'
 import { VerificationProgress } from '@/components/dashboard/VerificationProgress'
+import { OnboardingGuide } from '@/components/OnboardingGuide'
 import { createClient } from '@/lib/supabase/client'
 import { Sparkles, ArrowRight, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
@@ -141,6 +142,9 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Onboarding Guide */}
+        <OnboardingGuide />
 
         {/* Stats Header with Credit Progress */}
         <StatsHeader />

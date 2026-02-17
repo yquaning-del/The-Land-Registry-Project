@@ -37,9 +37,8 @@ export default function SignUpPage() {
 
     setLoading(true)
 
-    const supabase = createClient()
-
     try {
+      const supabase = createClient()
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -53,9 +52,30 @@ export default function SignUpPage() {
 
       if (error) throw error
 
+      // Complete signup process (grant credits, create profile)
+      try {
+        const response = await fetch('/api/auth/signup-complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fullName }),
+        })
+
+        if (!response.ok) {
+          console.error('Failed to complete signup:', await response.text())
+        }
+      } catch (completeError) {
+        console.error('Signup completion error:', completeError)
+      }
+
       setSuccess(true)
     } catch (err: any) {
-      setError(err.message || 'Failed to create account')
+      if (err.name === 'SUPABASE_CONFIG_ERROR') {
+        setError('Authentication service is not configured. Please check your environment setup.')
+      } else {
+        setError(err.message || 'Failed to create account')
+      }
     } finally {
       setLoading(false)
     }

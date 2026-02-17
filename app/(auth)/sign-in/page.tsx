@@ -23,9 +23,8 @@ export default function SignInPage() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-
     try {
+      const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -36,7 +35,11 @@ export default function SignInPage() {
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in')
+      if (err.name === 'SUPABASE_CONFIG_ERROR') {
+        setError('Authentication service is not configured. Please check your environment setup.')
+      } else {
+        setError(err.message || 'Failed to sign in')
+      }
     } finally {
       setLoading(false)
     }

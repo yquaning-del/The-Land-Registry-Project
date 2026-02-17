@@ -6,6 +6,7 @@ import { ThirdwebProvider } from '@/components/ThirdwebProvider'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
 import { AIChatbox } from '@/components/ai/AIChatbox'
+import { EnvironmentStatus } from '@/components/EnvironmentStatus'
 
 export const metadata: Metadata = {
   title: 'Land Registry Platform - Blockchain Land Verification',
@@ -25,6 +26,7 @@ export default function RootLayout({
             <ThirdwebProvider>
               {children}
               <AIChatbox />
+              <EnvironmentStatus />
             </ThirdwebProvider>
           </LanguageProvider>
         </ThemeProvider>
