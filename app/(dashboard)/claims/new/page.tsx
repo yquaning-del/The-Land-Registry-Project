@@ -302,6 +302,19 @@ export default function NewClaimPage() {
         throw new Error('User not authenticated')
       }
 
+      // Ensure user_profiles row exists — users who signed up before migration 011
+      // was applied won't have one, causing the FK constraint on land_claims to fail.
+      // ignoreDuplicates: true → ON CONFLICT DO NOTHING (INSERT permission only, safe).
+      await supabase.from('user_profiles').upsert(
+        {
+          id: user.id,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
+          role: 'CLAIMANT',
+          country_code: 'GH',
+        },
+        { onConflict: 'id', ignoreDuplicates: true }
+      )
+
       const coordText = formData.coordinates.trim()
       const parts = coordText
         .replace(/°/g, '')
