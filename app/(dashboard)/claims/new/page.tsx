@@ -50,6 +50,7 @@ export default function NewClaimPage() {
     location: '',
     coordinates: '',
     description: '',
+    country: 'Ghana',
     region: '',
     district: '',
     grantor_type: '',
@@ -351,8 +352,10 @@ export default function NewClaimPage() {
         latitude: lat,
         longitude: lng,
         address: formData.location,
+        country: formData.country || 'Ghana',
         region: formData.region || null,
         land_size_sqm: landSizeSqm,
+        parcel_id_barcode: formData.parcel_id || null,
         document_metadata: {
           parcelId: formData.parcel_id,
           ownerName: formData.owner_name,
@@ -386,9 +389,13 @@ export default function NewClaimPage() {
         .select()
         .single()
 
-      if (claimError) throw claimError
+      if (claimError) {
+        // PostgrestError is returned as a plain object (not instanceof Error) —
+        // extract the message directly so it shows in the UI
+        throw new Error(claimError.message || 'Database insert failed')
+      }
 
-      router.push('/dashboard/claims')
+      router.push('/claims')
     } catch (error) {
       console.error('Error creating claim:', error)
       setError(error instanceof Error ? error.message : 'Failed to create claim')
@@ -409,6 +416,7 @@ export default function NewClaimPage() {
     const errors: Record<string, string> = {}
     if (!formData.owner_name.trim()) errors.owner_name = 'Owner name is required'
     if (!formData.location.trim()) errors.location = 'Locality / address is required'
+    if (!formData.country.trim()) errors.country = 'Country is required'
     if (documentCategory && !formData.title_type) errors.title_type = 'Please select a title type'
     if (!formData.coordinates.trim()) errors.coordinates = 'GPS coordinates are required'
     setFormErrors(errors)
@@ -598,8 +606,8 @@ export default function NewClaimPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
                   <Label htmlFor="location">Locality / Address *</Label>
                   <Input
                     id="location"
@@ -613,17 +621,22 @@ export default function NewClaimPage() {
                   {formErrors.location && <p className="mt-1 text-xs text-red-600">{formErrors.location}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="district">District</Label>
-                  <Input
-                    id="district"
-                    name="district"
-                    value={formData.district}
+                  <Label htmlFor="country">Country *</Label>
+                  <select
+                    id="country"
+                    name="country"
+                    value={formData.country}
                     onChange={handleInputChange}
-                    placeholder="e.g., Soda"
-                  />
+                    required
+                    className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="Ghana">Ghana</option>
+                    <option value="Nigeria">Nigeria</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <div>
-                  <Label htmlFor="region">Region</Label>
+                  <Label htmlFor="region">Region / State</Label>
                   <Input
                     id="region"
                     name="region"
