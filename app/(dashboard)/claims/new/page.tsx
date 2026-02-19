@@ -237,6 +237,8 @@ export default function NewClaimPage() {
           parcel_id: prev.parcel_id || f.parcelId || '',
           location: prev.location || f.location || '',
           duration_years: prev.duration_years || (f.durationYears ? String(f.durationYears) : ''),
+          // grantorName from AI → traditional_authority_name (covers stool/family grantors)
+          traditional_authority_name: prev.traditional_authority_name || f.grantorName || '',
         }))
       }
 
@@ -355,7 +357,8 @@ export default function NewClaimPage() {
         country: formData.country || 'Ghana',
         region: formData.region || null,
         land_size_sqm: landSizeSqm,
-        parcel_id_barcode: formData.parcel_id || null,
+        // DB constraint: parcel_id_barcode must be NULL or >= 8 chars
+        parcel_id_barcode: (formData.parcel_id && formData.parcel_id.length >= 8) ? formData.parcel_id : null,
         document_metadata: {
           parcelId: formData.parcel_id,
           ownerName: formData.owner_name,
@@ -431,7 +434,7 @@ export default function NewClaimPage() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/dashboard/claims" className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
+          <Link href="/claims" className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Claims
           </Link>
@@ -833,7 +836,7 @@ export default function NewClaimPage() {
 
               {/* Submit Button */}
               <div className="flex gap-4">
-                <Link href="/dashboard/claims">
+                <Link href="/claims">
                   <Button variant="outline" disabled={loading}>
                     Cancel
                   </Button>
