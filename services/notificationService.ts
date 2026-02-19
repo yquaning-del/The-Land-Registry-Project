@@ -75,26 +75,17 @@ export class NotificationService {
    */
   async sendConflictAlert(conflictData: ConflictData): Promise<NotificationResult> {
     try {
-      const results: NotificationResult[] = []
+      // Run all independent notifications in parallel
+      const promises: Promise<NotificationResult>[] = [
+        this.notifyBuyer(conflictData),
+        ...(conflictData.lawyerEmail ? [this.sendEvidencePacket(conflictData)] : []),
+        ...(conflictData.sellerId ? [this.flagSellerForAudit(conflictData)] : []),
+      ]
 
-      // 1. Send alert to buyer
-      const buyerResult = await this.notifyBuyer(conflictData)
-      results.push(buyerResult)
-
-      // 2. Send evidence packet to lawyer if provided
-      if (conflictData.lawyerEmail) {
-        const lawyerResult = await this.sendEvidencePacket(conflictData)
-        results.push(lawyerResult)
-      }
-
-      // 3. Flag seller for audit if seller info provided
-      if (conflictData.sellerId) {
-        await this.flagSellerForAudit(conflictData)
-      }
-
-      // Check if all succeeded
+      const results = await Promise.all(promises)
+      const buyerResult = results[0]
       const allSuccess = results.every(r => r.success)
-      
+
       return {
         success: allSuccess,
         alertId: buyerResult.alertId,
@@ -111,12 +102,30 @@ export class NotificationService {
    */
   private async notifyBuyer(conflictData: ConflictData): Promise<NotificationResult> {
     try {
-      // Get buyer's user ID from email
-      const { data: profile } = await this.supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('email', conflictData.buyerEmail)
-        .single()
+      // Fetch buyer profile and send email in parallel
+      const [{ data: profile }, emailResult] = await Promise.all([
+        this.supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('email', conflictData.buyerEmail)
+          .single(),
+        sendEmail({
+          to: conflictData.buyerEmail,
+          template: 'conflictAlert',
+          data: {
+            userName: conflictData.buyerName,
+            claimId: conflictData.claimId,
+            parcelId: conflictData.parcelId || conflictData.claimId.slice(0, 8),
+            overlapPercentage: conflictData.overlapPercentage,
+            detectionTimestamp: conflictData.detectionTimestamp,
+            blockchainHash: conflictData.blockchainHash,
+            blockchainTxUrl: conflictData.blockchainTxUrl,
+            buyerPriorityDate: conflictData.buyerPriorityDate,
+            lawyerName: conflictData.lawyerName,
+            conflictMapUrl: conflictData.conflictMapUrl || `${baseUrl}/admin/conflicts?claim=${conflictData.claimId}`,
+          },
+        }),
+      ])
 
       const userId = profile?.id
 
@@ -124,7 +133,7 @@ export class NotificationService {
         console.warn('Buyer user ID not found for email:', conflictData.buyerEmail)
       }
 
-      // Create in-app alert
+      // Create in-app alert (requires userId, so done after profile fetch)
       let alertId: string | undefined
       if (userId) {
         const alertResult = await this.createInAppAlert({
@@ -146,35 +155,17 @@ export class NotificationService {
           },
         })
         alertId = alertResult.alertId
-      }
 
-      // Send email
-      const emailResult = await sendEmail({
-        to: conflictData.buyerEmail,
-        template: 'conflictAlert',
-        data: {
-          userName: conflictData.buyerName,
-          claimId: conflictData.claimId,
-          parcelId: conflictData.parcelId || conflictData.claimId.slice(0, 8),
-          overlapPercentage: conflictData.overlapPercentage,
-          detectionTimestamp: conflictData.detectionTimestamp,
-          blockchainHash: conflictData.blockchainHash,
-          blockchainTxUrl: conflictData.blockchainTxUrl,
-          buyerPriorityDate: conflictData.buyerPriorityDate,
-          lawyerName: conflictData.lawyerName,
-          conflictMapUrl: conflictData.conflictMapUrl || `${baseUrl}/admin/conflicts?claim=${conflictData.claimId}`,
-        },
-      })
-
-      // Update alert with email status
-      if (alertId && emailResult.success) {
-        await this.supabase
-          .from('security_alerts')
-          .update({
-            is_email_sent: true,
-            email_sent_at: new Date().toISOString(),
-          })
-          .eq('id', alertId)
+        // Update alert with email status
+        if (alertId && emailResult.success) {
+          await this.supabase
+            .from('security_alerts')
+            .update({
+              is_email_sent: true,
+              email_sent_at: new Date().toISOString(),
+            })
+            .eq('id', alertId)
+        }
       }
 
       return {
@@ -193,33 +184,34 @@ export class NotificationService {
    */
   async sendEvidencePacket(conflictData: ConflictData): Promise<NotificationResult> {
     try {
-      // Send email with evidence packet
-      const emailResult = await sendEmail({
-        to: conflictData.lawyerEmail!,
-        template: 'evidencePacket',
-        data: {
-          lawyerName: conflictData.lawyerName || 'Counsel',
-          buyerName: conflictData.buyerName,
-          claimId: conflictData.claimId,
-          parcelId: conflictData.parcelId || conflictData.claimId.slice(0, 8),
-          overlapPercentage: conflictData.overlapPercentage,
-          detectionTimestamp: conflictData.detectionTimestamp,
-          blockchainHash: conflictData.blockchainHash,
-          blockchainTxUrl: conflictData.blockchainTxUrl,
-          buyerPriorityDate: conflictData.buyerPriorityDate,
-          rivalClaimDate: conflictData.rivalClaimDate,
-          conflictMapUrl: conflictData.conflictMapUrl || `${baseUrl}/admin/conflicts?claim=${conflictData.claimId}`,
-          sellerName: conflictData.sellerName,
-        },
-      })
+      // Send email and fetch lawyer profile in parallel
+      const [emailResult, { data: lawyerProfile }] = await Promise.all([
+        sendEmail({
+          to: conflictData.lawyerEmail!,
+          template: 'evidencePacket',
+          data: {
+            lawyerName: conflictData.lawyerName || 'Counsel',
+            buyerName: conflictData.buyerName,
+            claimId: conflictData.claimId,
+            parcelId: conflictData.parcelId || conflictData.claimId.slice(0, 8),
+            overlapPercentage: conflictData.overlapPercentage,
+            detectionTimestamp: conflictData.detectionTimestamp,
+            blockchainHash: conflictData.blockchainHash,
+            blockchainTxUrl: conflictData.blockchainTxUrl,
+            buyerPriorityDate: conflictData.buyerPriorityDate,
+            rivalClaimDate: conflictData.rivalClaimDate,
+            conflictMapUrl: conflictData.conflictMapUrl || `${baseUrl}/admin/conflicts?claim=${conflictData.claimId}`,
+            sellerName: conflictData.sellerName,
+          },
+        }),
+        this.supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('email', conflictData.lawyerEmail)
+          .single(),
+      ])
 
       // Create in-app notification for lawyer if they have an account
-      const { data: lawyerProfile } = await this.supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('email', conflictData.lawyerEmail)
-        .single()
-
       if (lawyerProfile?.id) {
         await this.createInAppAlert({
           userId: lawyerProfile.id,

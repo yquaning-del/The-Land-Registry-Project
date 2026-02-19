@@ -6,13 +6,17 @@ import { Button } from '@/components/ui/button'
 import { PricingCard } from '@/components/PricingCard'
 import { PAYSTACK_PLANS } from '@/types/paystack.types'
 import { createClient } from '@/lib/supabase/client'
-import { Coins, CreditCard, Calendar, ExternalLink } from 'lucide-react'
+import { Coins, CreditCard, Calendar, ExternalLink, AlertTriangle, X } from 'lucide-react'
+
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@landregistry.africa'
 
 export default function BillingPage() {
   const [subscription, setSubscription] = useState<any>(null)
   const [credits, setCredits] = useState<any>(null)
   const [transactions, setTransactions] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   useEffect(() => {
     loadBillingData()
@@ -23,7 +27,6 @@ export default function BillingPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
-      // Load subscription
       const { data: subData } = await supabase
         .from('subscriptions')
         .select('*')
@@ -31,7 +34,6 @@ export default function BillingPage() {
         .single()
       setSubscription(subData)
 
-      // Load credits
       const { data: creditsData } = await supabase
         .from('credits')
         .select('*')
@@ -39,7 +41,6 @@ export default function BillingPage() {
         .single()
       setCredits(creditsData)
 
-      // Load transactions
       const { data: transData } = await supabase
         .from('credit_transactions')
         .select('*')
@@ -58,23 +59,76 @@ export default function BillingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planType }),
       })
-
       const data = await response.json()
+      if (!response.ok) {
+        alert(data.error || 'Failed to initialize checkout. Please try again.')
+        return
+      }
       if (data.authorization_url) {
         window.location.href = data.authorization_url
+      } else {
+        alert('Checkout URL not received. Please try again.')
       }
     } catch (error) {
       console.error('Checkout error:', error)
+      alert('Failed to start checkout. Please check your connection and try again.')
     } finally {
       setLoading(false)
     }
   }
 
   async function handleManageBilling() {
-    // Paystack doesn't have a customer portal like Stripe
-    // Users can manage subscriptions by contacting support or canceling through the dashboard
-    alert('To manage your subscription, please contact support or cancel from this page.')
+    // Stripe users: redirect to Stripe Customer Portal
+    if (subscription?.stripe_customer_id) {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/stripe/portal', { method: 'POST' })
+        const data = await res.json()
+        if (data.url) {
+          window.location.href = data.url
+        } else {
+          alert(data.error || 'Failed to open billing portal')
+        }
+      } catch {
+        alert('Failed to open billing portal. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // Paystack users: show cancel confirm
+    setShowCancelConfirm(true)
   }
+
+  async function handleCancelSubscription() {
+    if (!subscription) return
+    setCancelLoading(true)
+    try {
+      if (subscription.stripe_subscription_id) {
+        const res = await fetch('/api/stripe/cancel', { method: 'POST' })
+        const data = await res.json()
+        if (res.ok) {
+          alert('Your subscription will be canceled at the end of the current billing period.')
+          setShowCancelConfirm(false)
+          await loadBillingData()
+        } else {
+          alert(data.error || 'Failed to cancel subscription')
+        }
+      } else {
+        // Paystack — manual cancellation via support
+        alert(`To cancel your Paystack subscription, please email ${SUPPORT_EMAIL} with your account details.`)
+        setShowCancelConfirm(false)
+      }
+    } catch {
+      alert('Failed to cancel subscription. Please try again.')
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
+  const isStripeSub = !!subscription?.stripe_customer_id
+  const isActiveSubscription = subscription && subscription.status === 'active'
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -82,6 +136,43 @@ export default function BillingPage() {
         <h1 className="text-3xl font-bold text-navy-900 mb-2">Billing & Subscription</h1>
         <p className="text-gray-600">Manage your subscription and credits</p>
       </div>
+
+      {/* Cancel Confirmation Dialog */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Cancel Subscription?</h3>
+                <p className="text-gray-600 text-sm mt-1">
+                  {isStripeSub
+                    ? 'Your subscription will remain active until the end of your current billing period. You will not be charged again.'
+                    : 'To cancel your Paystack subscription, our support team will assist you.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelLoading}
+              >
+                Keep Subscription
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleCancelSubscription}
+                disabled={cancelLoading}
+              >
+                {cancelLoading ? 'Canceling...' : 'Yes, Cancel'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Current Plan & Credits */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -100,25 +191,43 @@ export default function BillingPage() {
                     {subscription.plan_type} Plan
                   </p>
                   <p className="text-sm text-gray-600 capitalize">
-                    Status: <span className="font-semibold">{subscription.status}</span>
+                    Status:{' '}
+                    <span className={`font-semibold ${subscription.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {subscription.cancel_at_period_end ? 'Canceling at period end' : subscription.status}
+                    </span>
                   </p>
                 </div>
                 {subscription.current_period_end && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Calendar className="h-4 w-4" />
                     <span>
-                      Renews on {new Date(subscription.current_period_end).toLocaleDateString()}
+                      {subscription.cancel_at_period_end ? 'Cancels on' : 'Renews on'}{' '}
+                      {new Date(subscription.current_period_end).toLocaleDateString()}
                     </span>
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleManageBilling}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Manage Subscription
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={handleManageBilling}
+                    disabled={loading}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    {isStripeSub ? 'Manage in Stripe' : 'Manage Subscription'}
+                  </Button>
+                  {isActiveSubscription && !subscription.cancel_at_period_end && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => setShowCancelConfirm(true)}
+                      title="Cancel subscription"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-center py-4">

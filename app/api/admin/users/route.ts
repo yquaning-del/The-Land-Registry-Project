@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     // Check if user is admin
     const { data: userData } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
@@ -29,13 +29,15 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role')
 
     let query = supabase
-      .from('users')
-      .select('id, email, full_name, role, credits, created_at, last_sign_in_at', { count: 'exact' })
+      .from('user_profiles')
+      .select('id, full_name, role, created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (search) {
-      query = query.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`)
+      // Escape LIKE wildcards to prevent unexpected pattern matches
+      const escapedSearch = search.replace(/[%_\\]/g, '\\$&')
+      query = query.or(`full_name.ilike.%${escapedSearch}%`)
     }
 
     if (role) {
@@ -73,7 +75,7 @@ export async function PATCH(request: NextRequest) {
 
     // Check if user is admin
     const { data: adminData } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('role')
       .eq('id', user.id)
       .single()
@@ -88,7 +90,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    const updates: any = {}
+    const VALID_ROLES = ['USER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
+    if (role && !VALID_ROLES.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role value' }, { status: 400 })
+    }
+    if (credits !== undefined && (!Number.isInteger(credits) || credits < 0)) {
+      return NextResponse.json({ error: 'Credits must be a non-negative integer' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {}
     if (role) updates.role = role
     if (credits !== undefined) updates.credits = credits
 
@@ -97,7 +107,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const { data: updatedUser, error: updateError } = await supabase
-      .from('users')
+      .from('user_profiles')
       .update(updates)
       .eq('id', userId)
       .select()

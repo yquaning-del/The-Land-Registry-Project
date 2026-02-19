@@ -10,49 +10,44 @@ export function CreditBalance() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadCredits()
-
-    // Set up real-time subscription
     const supabase = createClient()
-    const channel = supabase
-      .channel('credits-balance')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'credits',
-        },
-        (payload) => {
-          if (payload.new && 'balance' in payload.new) {
-            setCredits(payload.new.balance as number)
-          }
-        }
-      )
-      .subscribe()
+    let channel: ReturnType<typeof supabase.channel> | undefined
+    let mounted = true
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!mounted || !user) { setLoading(false); return }
 
-  async function loadCredits() {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (user) {
       const { data } = await supabase
         .from('credits')
         .select('balance')
         .eq('user_id', user.id)
         .single()
+      if (!mounted) return
+      if (data) setCredits(data.balance)
+      setLoading(false)
 
-      if (data) {
-        setCredits(data.balance)
-      }
+      // Filtered realtime subscription — only listens for current user's row
+      channel = supabase
+        .channel(`credits-balance-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'credits', filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            if (mounted && payload.new && 'balance' in payload.new) {
+              setCredits(payload.new.balance as number)
+            }
+          }
+        )
+        .subscribe()
     }
-    setLoading(false)
-  }
+
+    init()
+    return () => {
+      mounted = false
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [])
 
   if (loading) {
     return (

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { EnhancedVerificationPipeline } from '@/lib/ai/enhanced-verification'
 import { isOpenAIConfigured } from '@/lib/ai/openai'
+import { rateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
+import { sendVerificationCompleteEmail } from '@/lib/email/sender'
 
 type LandClaim = {
   id: string
@@ -19,16 +21,19 @@ type LandClaim = {
 
 function mapAIDocTypeToTitleType(aiDocType: string): string | null {
   const n = aiDocType.toLowerCase().trim()
+  // Check more specific patterns first to avoid overlap
   if (/stool\s*indenture/.test(n)) return 'STOOL_INDENTURE'
   if (/family\s*indenture/.test(n)) return 'FAMILY_INDENTURE'
   if (/customary\s*freehold/.test(n)) return 'CUSTOMARY_FREEHOLD'
-  if (/indenture|plan\s*of\s*land/.test(n)) return 'STOOL_INDENTURE'
   if (/certificate\s*of\s*occupancy/.test(n)) return 'CERTIFICATE_OF_OCCUPANCY'
   if (/governor.?s?\s*consent/.test(n)) return 'GOVERNOR_CONSENT'
   if (/deed\s*of\s*assignment/.test(n)) return 'DEED_OF_ASSIGNMENT'
-  if (/freehold/.test(n)) return 'FREEHOLD'
   if (/leasehold|lease/.test(n)) return 'LEASEHOLD'
+  if (/freehold/.test(n)) return 'FREEHOLD'
+  // Generic indenture fallback after specific checks
+  if (/indenture|plan\s*of\s*land/.test(n)) return 'STOOL_INDENTURE'
   if (/land\s*title|land\s*certificate/.test(n)) return 'FREEHOLD'
+  console.warn(`[verification] Unrecognized AI document type: "${aiDocType}" — could not map to title_type`)
   return null
 }
 
@@ -41,6 +46,10 @@ function mapAIDocTypeToCategory(aiDocType: string): string | null {
 
 // POST - Start verification for a claim
 export async function POST(request: NextRequest) {
+  // Rate limiting: 10 verification starts per minute per user/IP
+  const rlResult = rateLimit(getClientIdentifier(request), { maxRequests: 10, windowMs: 60000 })
+  if (!rlResult.success) return rateLimitResponse(rlResult) as unknown as NextResponse
+
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -75,24 +84,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Update status to processing
-    await supabase
+    const { error: processingError } = await supabase
       .from('land_claims')
       .update({ ai_verification_status: 'PROCESSING' } as any)
       .eq('id', claimId)
 
-    // Run enhanced AI verification pipeline
-    const pipeline = new EnhancedVerificationPipeline()
-    const result = await pipeline.execute({
-      claimId: claimData.id,
-      documentUrl: claimData.original_document_url || undefined,
-      latitude: claimData.latitude || 0,
-      longitude: claimData.longitude || 0,
-      claimantName: claimData.claimant_name || undefined,
-      grantorName: claimData.grantor_name || undefined,
-      polygon: claimData.polygon_coordinates ? {
-        coordinates: claimData.polygon_coordinates
-      } : undefined,
-    })
+    if (processingError) {
+      console.error('Failed to set claim to PROCESSING:', processingError)
+      return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
+    }
+
+    let result: Awaited<ReturnType<EnhancedVerificationPipeline['execute']>>
+    try {
+      // Run enhanced AI verification pipeline
+      const pipeline = new EnhancedVerificationPipeline()
+      result = await pipeline.execute({
+        claimId: claimData.id,
+        documentUrl: claimData.original_document_url || undefined,
+        latitude: claimData.latitude || 0,
+        longitude: claimData.longitude || 0,
+        claimantName: claimData.claimant_name || undefined,
+        grantorName: claimData.grantor_name || undefined,
+        polygon: claimData.polygon_coordinates ? {
+          coordinates: claimData.polygon_coordinates
+        } : undefined,
+      })
+    } catch (pipelineError) {
+      // Revert PROCESSING status so the claim can be retried
+      await supabase
+        .from('land_claims')
+        .update({ ai_verification_status: 'PENDING_VERIFICATION' } as any)
+        .eq('id', claimId)
+      throw pipelineError
+    }
 
     // Determine final status based on result
     let newStatus: string
@@ -138,11 +162,17 @@ export async function POST(request: NextRequest) {
       .eq('id', claimId)
 
     if (updateError) {
-      console.error('Error updating claim:', updateError)
+      // Revert to PENDING so user can retry rather than leave claim stuck in PROCESSING
+      await supabase
+        .from('land_claims')
+        .update({ ai_verification_status: 'PENDING_VERIFICATION' } as any)
+        .eq('id', claimId)
+      console.error('Error updating claim with results, reverted to PENDING:', updateError)
+      return NextResponse.json({ error: 'Failed to save verification results' }, { status: 500 })
     }
 
     // Create verification record
-    await supabase
+    const { error: insertError } = await supabase
       .from('verification_results')
       .insert({
         claim_id: claimId,
@@ -162,6 +192,26 @@ export async function POST(request: NextRequest) {
           executionTimeMs: result.executionTimeMs,
         },
       } as any)
+
+    if (insertError) {
+      console.error('Failed to insert verification_results record:', insertError)
+      // Non-fatal: claim status was already updated successfully
+    }
+
+    // Send email notification (non-blocking — don't fail request if email fails)
+    if (user.email) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
+      sendVerificationCompleteEmail(user.email, {
+        userName: profile?.full_name || user.email,
+        claimId,
+        verificationStatus: newStatus,
+        confidenceScore: result.overallConfidence,
+      }).catch((err: unknown) => console.error('Email notification error:', err))
+    }
 
     return NextResponse.json({
       success: true,

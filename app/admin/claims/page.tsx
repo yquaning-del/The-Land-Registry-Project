@@ -6,29 +6,26 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  FileText, 
-  CheckCircle, 
-  Clock, 
-  AlertTriangle, 
+import {
+  FileText,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
   Eye,
-  TrendingUp,
-  Users,
-  MapPin
+  MapPin,
+  User,
 } from 'lucide-react'
 
 interface LandClaim {
   id: string
-  parcel_id: string
-  owner_name: string
-  location: string
-  status: string
-  verification_status: string
+  claimant_id: string
+  parcel_id_barcode: string | null
+  document_metadata: { ownerName?: string; parcelId?: string } | null
+  address: string | null
+  ai_verification_status: string
+  document_type: string | null
   created_at: string
-  user_id: string
-  users?: {
-    email: string
-  }
+  user_profiles: { full_name: string | null } | null
 }
 
 interface Stats {
@@ -38,46 +35,73 @@ interface Stats {
   disputed: number
 }
 
+const PAGE_SIZE = 50
+
 export default function AdminClaimsPage() {
   const [claims, setClaims] = useState<LandClaim[]>([])
   const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, verified: 0, disputed: 0 })
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
+  const [page, setPage] = useState(0)
+  const [totalFiltered, setTotalFiltered] = useState(0)
+
+  useEffect(() => {
+    setPage(0)
+  }, [filter])
 
   useEffect(() => {
     loadClaims()
-  }, [filter])
+  }, [filter, page])
 
   const loadClaims = async () => {
     setLoading(true)
     const supabase = createClient()
 
     try {
-      let query = supabase
+      // Stats always reflect global totals — run in parallel with filtered query
+      const statsQuery = supabase
+        .from('land_claims')
+        .select('ai_verification_status', { count: 'exact' })
+
+      let claimsQuery = supabase
         .from('land_claims')
         .select(`
-          *,
-          users:user_id (email)
-        `)
+          id, claimant_id, parcel_id_barcode, document_metadata, address,
+          ai_verification_status, document_type, created_at,
+          user_profiles:claimant_id (full_name)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
 
       if (filter !== 'all') {
-        query = query.eq('verification_status', filter)
+        claimsQuery = claimsQuery.eq('ai_verification_status', filter)
       }
 
-      const { data, error } = await query
+      const [{ data: allStatusData }, { data, count, error }] = await Promise.all([
+        statsQuery,
+        claimsQuery,
+      ])
 
       if (error) throw error
 
-      setClaims(data || [])
+      setClaims((data || []) as unknown as LandClaim[])
+      setTotalFiltered(count || 0)
 
-      // Calculate stats
-      const allClaims = data || []
+      const all = allStatusData || []
       setStats({
-        total: allClaims.length,
-        pending: allClaims.filter(c => c.verification_status === 'PENDING').length,
-        verified: allClaims.filter(c => c.verification_status === 'VERIFIED').length,
-        disputed: allClaims.filter(c => c.verification_status === 'DISPUTED').length,
+        total: all.length,
+        pending: all.filter(c =>
+          c.ai_verification_status === 'PENDING_VERIFICATION' ||
+          c.ai_verification_status === 'PENDING_HUMAN_REVIEW'
+        ).length,
+        verified: all.filter(c =>
+          c.ai_verification_status === 'AI_VERIFIED' ||
+          c.ai_verification_status === 'APPROVED'
+        ).length,
+        disputed: all.filter(c =>
+          c.ai_verification_status === 'DISPUTED' ||
+          c.ai_verification_status === 'REJECTED'
+        ).length,
       })
     } catch (error) {
       console.error('Error loading claims:', error)
@@ -88,12 +112,18 @@ export default function AdminClaimsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'VERIFIED':
+      case 'AI_VERIFIED':
+      case 'APPROVED':
         return <Badge className="bg-emerald-500">Verified</Badge>
-      case 'PENDING':
+      case 'PENDING_VERIFICATION':
         return <Badge className="bg-yellow-500">Pending</Badge>
+      case 'PENDING_HUMAN_REVIEW':
+        return <Badge className="bg-blue-500">Human Review</Badge>
+      case 'PROCESSING':
+        return <Badge className="bg-purple-500">Processing</Badge>
       case 'DISPUTED':
-        return <Badge className="bg-red-500">Disputed</Badge>
+      case 'REJECTED':
+        return <Badge className="bg-red-500">Rejected</Badge>
       default:
         return <Badge className="bg-gray-500">{status}</Badge>
     }
@@ -102,7 +132,6 @@ export default function AdminClaimsPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-navy-900 mb-2">Admin Claims Dashboard</h1>
           <p className="text-gray-600">Review and manage all land claims submitted to the platform</p>
@@ -119,7 +148,6 @@ export default function AdminClaimsPage() {
               <div className="text-3xl font-bold text-navy-900">{stats.total}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">Pending Review</CardTitle>
@@ -129,7 +157,6 @@ export default function AdminClaimsPage() {
               <div className="text-3xl font-bold text-yellow-600">{stats.pending}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">Verified</CardTitle>
@@ -139,10 +166,9 @@ export default function AdminClaimsPage() {
               <div className="text-3xl font-bold text-emerald-600">{stats.verified}</div>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Disputed</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">Rejected / Disputed</CardTitle>
               <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
@@ -159,30 +185,21 @@ export default function AdminClaimsPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant={filter === 'all' ? 'default' : 'outline'}
-                onClick={() => setFilter('all')}
-              >
-                All Claims
-              </Button>
-              <Button
-                variant={filter === 'PENDING' ? 'default' : 'outline'}
-                onClick={() => setFilter('PENDING')}
-              >
-                Pending
-              </Button>
-              <Button
-                variant={filter === 'VERIFIED' ? 'default' : 'outline'}
-                onClick={() => setFilter('VERIFIED')}
-              >
-                Verified
-              </Button>
-              <Button
-                variant={filter === 'DISPUTED' ? 'default' : 'outline'}
-                onClick={() => setFilter('DISPUTED')}
-              >
-                Disputed
-              </Button>
+              {[
+                { value: 'all', label: 'All Claims' },
+                { value: 'PENDING_HUMAN_REVIEW', label: 'Human Review' },
+                { value: 'PENDING_VERIFICATION', label: 'Pending' },
+                { value: 'AI_VERIFIED', label: 'Verified' },
+                { value: 'REJECTED', label: 'Rejected' },
+              ].map(({ value, label }) => (
+                <Button
+                  key={value}
+                  variant={filter === value ? 'default' : 'outline'}
+                  onClick={() => setFilter(value)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -192,13 +209,13 @@ export default function AdminClaimsPage() {
           <CardHeader>
             <CardTitle>Claims List</CardTitle>
             <CardDescription>
-              {loading ? 'Loading claims...' : `Showing ${claims.length} claim(s)`}
+              {loading ? 'Loading claims...' : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalFiltered)} of ${totalFiltered} claim(s)`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="text-center py-12">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent" />
                 <p className="mt-4 text-gray-600">Loading claims...</p>
               </div>
             ) : claims.length === 0 ? (
@@ -211,24 +228,12 @@ export default function AdminClaimsPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Parcel ID
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Owner
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Location
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parcel ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -237,22 +242,27 @@ export default function AdminClaimsPage() {
                         <td className="px-4 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <MapPin className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm font-medium text-navy-900">
-                              {claim.parcel_id}
+                            <span className="text-sm font-medium text-navy-900 font-mono">
+                              {claim.parcel_id_barcode || claim.document_metadata?.parcelId || '—'}
                             </span>
                           </div>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{claim.owner_name}</div>
-                          <div className="text-xs text-gray-500">{claim.users?.email}</div>
+                          <div className="text-sm text-gray-900">
+                            {claim.document_metadata?.ownerName || '—'}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <User className="h-3 w-3" />
+                            {claim.user_profiles?.full_name || claim.claimant_id.slice(0, 8) + '...'}
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="text-sm text-gray-900 max-w-xs truncate">
-                            {claim.location}
+                            {claim.address || '—'}
                           </div>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
-                          {getStatusBadge(claim.verification_status)}
+                          {getStatusBadge(claim.ai_verification_status)}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(claim.created_at).toLocaleDateString()}
@@ -269,6 +279,31 @@ export default function AdminClaimsPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalFiltered > PAGE_SIZE && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0 || loading}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600">
+                  Page {page + 1} of {Math.ceil(totalFiltered / PAGE_SIZE)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * PAGE_SIZE >= totalFiltered || loading}
+                >
+                  Next
+                </Button>
               </div>
             )}
           </CardContent>

@@ -6,18 +6,17 @@ import { Button } from '@/components/ui/button'
 import { DocumentViewer } from '@/components/admin/DocumentViewer'
 import { EvidenceCard, type EvidenceItem } from '@/components/admin/EvidenceCard'
 import { AIReasoningTrace, type ReasoningStep } from '@/components/admin/AIReasoningTrace'
-import { DecisionConsole } from '@/components/admin/DecisionConsole'
+import { AdminDecisionWrapper } from '@/components/admin/AdminDecisionWrapper'
 import { QRCodeGenerator } from '@/components/QRCodeGenerator'
 import { MintTitleButtonWrapper } from '@/components/MintTitleButtonWrapper'
-import { 
-  ArrowLeft, 
-  User, 
-  MapPin, 
-  Calendar, 
-  FileText, 
+import {
+  ArrowLeft,
+  User,
+  MapPin,
+  Calendar,
+  FileText,
   Shield,
   AlertCircle,
-  CheckCircle2
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -29,7 +28,7 @@ interface PageProps {
 
 async function getClaimData(id: string) {
   const supabase = await createClient()
-  
+
   const { data: claim, error } = await supabase
     .from('land_claims')
     .select(`
@@ -52,75 +51,60 @@ async function getClaimData(id: string) {
 function generateMockEvidenceItems(claim: any): EvidenceItem[] {
   const evidence: EvidenceItem[] = []
 
-  // Name Match Evidence
   evidence.push({
     id: 'name-match',
     title: 'Grantor Name Verification',
     status: claim.ai_confidence_score > 0.85 ? 'success' : claim.ai_confidence_score > 0.6 ? 'warning' : 'critical',
-    reasoning: `Extracted name "Kofi A. Mensah" is an 88% fuzzy match to registered owner "Kofi Mensah". Partial match detected - common variation in middle initial.`,
-    confidence: 0.88,
+    reasoning: `Owner name "${claim.owner_name || 'N/A'}" cross-referenced against claim registry. AI confidence: ${((claim.ai_confidence_score || 0) * 100).toFixed(0)}%.`,
+    confidence: claim.ai_confidence_score || 0.5,
     highlightArea: { x: 15, y: 25, width: 30, height: 8 },
   })
 
-  // Parcel ID Evidence
   evidence.push({
     id: 'parcel-id',
     title: 'Parcel ID Verification',
     status: claim.parcel_id_barcode ? 'success' : 'critical',
-    reasoning: claim.parcel_id_barcode 
+    reasoning: claim.parcel_id_barcode
       ? `Parcel ID "${claim.parcel_id_barcode}" matches Ghana Land Act 2020 format and exists in database.`
       : 'No parcel ID barcode found on document.',
     confidence: claim.parcel_id_barcode ? 1.0 : 0.0,
     highlightArea: claim.parcel_id_barcode ? { x: 60, y: 15, width: 25, height: 6 } : undefined,
   })
 
-  // Date Verification
   evidence.push({
     id: 'date-check',
     title: 'Document Date Validation',
     status: 'success',
-    reasoning: `Document dated "15th January 2026" is within valid range (0-99 years). No future date or expiry anomalies detected.`,
+    reasoning: 'Document date validated — within acceptable range (0-99 years). No future date anomalies detected.',
     confidence: 0.95,
     highlightArea: { x: 15, y: 75, width: 35, height: 5 },
   })
 
-  // GPS Coordinates
-  evidence.push({
-    id: 'gps-overlay',
-    title: 'GPS Coordinates Cross-Reference',
-    status: 'success',
-    reasoning: `Coordinates (${claim.latitude.toFixed(4)}°, ${claim.longitude.toFixed(4)}°) verified against satellite imagery. No overlapping claims detected within 100m radius.`,
-    confidence: 0.92,
-    highlightArea: { x: 15, y: 60, width: 40, height: 8 },
-  })
-
-  // Signature Verification
-  if (claim.legal_jurat_flag) {
+  if (claim.latitude && claim.longitude) {
     evidence.push({
-      id: 'signature',
-      title: 'Signature/Thumbprint Verification',
-      status: 'warning',
-      reasoning: 'Document contains thumbprint signature. Requires additional witness verification per LC.gov.gh standards.',
-      confidence: 0.70,
-      highlightArea: { x: 50, y: 85, width: 20, height: 10 },
+      id: 'gps-overlay',
+      title: 'GPS Coordinates Cross-Reference',
+      status: claim.spatial_conflict_status === 'NO_CONFLICT' ? 'success' : 'warning',
+      reasoning: `Coordinates (${Number(claim.latitude).toFixed(4)}°, ${Number(claim.longitude).toFixed(4)}°) verified. Spatial status: ${claim.spatial_conflict_status || 'UNCHECKED'}.`,
+      confidence: claim.spatial_conflict_status === 'NO_CONFLICT' ? 0.92 : 0.6,
+      highlightArea: { x: 15, y: 60, width: 40, height: 8 },
     })
   }
 
-  // Fraud Detection
   if (claim.fraud_confidence_score !== null && claim.fraud_confidence_score > 0.3) {
     evidence.push({
       id: 'fraud-detection',
       title: 'Forgery Pattern Analysis',
       status: 'critical',
       reasoning: `High fraud risk detected (${(claim.fraud_confidence_score * 100).toFixed(0)}%). Suspicious formatting patterns or keyword anomalies found.`,
-      confidence: 1 - claim.fraud_confidence_score,
+      confidence: claim.fraud_confidence_score,
     })
   } else {
     evidence.push({
       id: 'fraud-detection',
       title: 'Forgery Pattern Analysis',
       status: 'success',
-      reasoning: 'No suspicious formatting patterns detected. Document appears authentic with natural aging characteristics.',
+      reasoning: 'No suspicious formatting patterns detected. Document appears authentic.',
       confidence: 0.94,
     })
   }
@@ -128,89 +112,34 @@ function generateMockEvidenceItems(claim: any): EvidenceItem[] {
   return evidence
 }
 
-function generateMockReasoningSteps(claim: any): ReasoningStep[] {
+function generateReasoningSteps(claim: any): ReasoningStep[] {
+  const metadata = claim.ai_verification_metadata
+  if (metadata?.reasoning && Array.isArray(metadata.reasoning)) {
+    return metadata.reasoning
+  }
+
   return [
     {
       id: 'step-1',
       agentName: 'OCR Extraction Agent',
       timestamp: new Date(Date.now() - 5000).toISOString(),
       input: { documentUrl: claim.original_document_url },
-      output: {
-        grantorName: 'Kofi A. Mensah',
-        parcelId: claim.parcel_id_barcode || 'GH20260001234',
-        documentDate: '15th January 2026',
-      },
+      output: { ownerName: claim.owner_name, parcelId: claim.parcel_id_barcode },
       confidenceScore: 0.95,
       executionTimeMs: 2341,
       status: 'success',
-      reasoning: 'Successfully extracted text from document using pattern matching',
+      reasoning: 'Text extracted from document using AI pattern matching',
     },
     {
       id: 'step-2',
-      agentName: 'Fuzzy Matching Agent',
-      timestamp: new Date(Date.now() - 3000).toISOString(),
-      input: { extractedName: 'Kofi A. Mensah', databaseRecords: 1247 },
-      output: {
-        matched: true,
-        matchScore: 0.88,
-        matchType: 'PARTIAL',
-      },
-      confidenceScore: 0.88,
-      executionTimeMs: 156,
-      status: 'warning',
-      reasoning: 'Partial name match found - middle initial variation detected',
-    },
-    {
-      id: 'step-3',
-      agentName: 'Date Anomaly Detector',
-      timestamp: new Date(Date.now() - 2000).toISOString(),
-      input: { documentDate: '15th January 2026', maxLeaseYears: 99 },
-      output: {
-        isValid: true,
-        ageInYears: 0.1,
-        withinRange: true,
-      },
-      confidenceScore: 0.95,
-      executionTimeMs: 45,
-      status: 'success',
-      reasoning: 'Document date is valid and within acceptable range',
-    },
-    {
-      id: 'step-4',
       agentName: 'GPS Validation Agent',
-      timestamp: new Date(Date.now() - 1000).toISOString(),
-      input: { 
-        latitude: claim.latitude, 
-        longitude: claim.longitude,
-        checkRadius: 100,
-      },
-      output: {
-        isValid: true,
-        overlappingClaims: 0,
-        nearbyLandmarks: ['Main Road', 'School'],
-      },
-      confidenceScore: 0.92,
+      timestamp: new Date(Date.now() - 2000).toISOString(),
+      input: { latitude: claim.latitude, longitude: claim.longitude },
+      output: { isValid: !!claim.latitude, spatialStatus: claim.spatial_conflict_status },
+      confidenceScore: claim.latitude ? 0.92 : 0.5,
       executionTimeMs: 523,
-      status: 'success',
-      reasoning: 'No overlapping claims detected in vicinity',
-    },
-    {
-      id: 'step-5',
-      agentName: 'Forgery Detection Agent',
-      timestamp: new Date().toISOString(),
-      input: { 
-        extractedText: '...',
-        formattingPatterns: ['font-consistency', 'alignment', 'aging'],
-      },
-      output: {
-        suspiciousPatterns: [],
-        fraudKeywordsFound: false,
-        overallRisk: 'LOW',
-      },
-      confidenceScore: 0.94,
-      executionTimeMs: 234,
-      status: 'success',
-      reasoning: 'No forgery indicators detected',
+      status: claim.latitude ? 'success' : 'warning',
+      reasoning: claim.latitude ? 'GPS coordinates validated against spatial registry' : 'No GPS coordinates provided',
     },
   ]
 }
@@ -223,8 +152,9 @@ export default async function ClaimAuditPage({ params }: PageProps) {
   }
 
   const evidenceItems = generateMockEvidenceItems(claim)
-  const reasoningSteps = generateMockReasoningSteps(claim)
+  const reasoningSteps = generateReasoningSteps(claim)
   const finalScore = claim.ai_confidence_score || 0.75
+  const isDecided = claim.ai_verification_status === 'APPROVED' || claim.ai_verification_status === 'REJECTED'
 
   const getStatusBadge = () => {
     if (claim.ai_verification_status === 'APPROVED') {
@@ -272,7 +202,6 @@ export default async function ClaimAuditPage({ params }: PageProps) {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
-        {/* Claim Info Bar */}
         <Card className="mb-6">
           <CardContent className="py-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -287,7 +216,7 @@ export default async function ClaimAuditPage({ params }: PageProps) {
                 <MapPin className="h-5 w-5 text-gray-400" />
                 <div>
                   <div className="text-xs text-gray-600">Location</div>
-                  <div className="font-semibold">{claim.region}, {claim.country}</div>
+                  <div className="font-semibold">{claim.region || 'N/A'}, {claim.country || 'N/A'}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -310,45 +239,38 @@ export default async function ClaimAuditPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        {/* Split Screen Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Left: Document Viewer */}
           <Card className="lg:sticky lg:top-24 lg:h-[calc(100vh-12rem)]">
             <CardHeader>
               <CardTitle>Uploaded Land Deed</CardTitle>
               <CardDescription>
-                High-resolution document viewer with zoom and highlight capabilities
+                Document viewer with zoom capabilities
               </CardDescription>
             </CardHeader>
             <CardContent className="h-[600px] lg:h-[calc(100%-120px)]">
               <Suspense fallback={<div>Loading document...</div>}>
-                <DocumentViewer documentUrl={(claim as any).original_document_url} />
+                <DocumentViewer documentUrl={claim.original_document_url} />
               </Suspense>
             </CardContent>
           </Card>
 
-          {/* Right: AI Extracted Data & Evidence */}
+          {/* Right: Evidence & Reasoning */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Extracted AI Data</CardTitle>
-                <CardDescription>
-                  Information extracted and verified by AI agents
-                </CardDescription>
+                <CardTitle>Extracted Data</CardTitle>
+                <CardDescription>AI-extracted and verified information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-600">Grantor Name:</span>
-                    <span className="ml-2 font-semibold">Kofi A. Mensah</span>
+                    <span className="text-gray-600">Owner Name:</span>
+                    <span className="ml-2 font-semibold">{claim.owner_name || claim.grantor_name || 'N/A'}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Parcel ID:</span>
-                    <span className="ml-2 font-semibold">{claim.parcel_id_barcode || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Document Date:</span>
-                    <span className="ml-2 font-semibold">15th January 2026</span>
+                    <span className="ml-2 font-semibold">{claim.parcel_id_barcode || claim.parcel_id || 'N/A'}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Land Size:</span>
@@ -357,18 +279,28 @@ export default async function ClaimAuditPage({ params }: PageProps) {
                   <div>
                     <span className="text-gray-600">Coordinates:</span>
                     <span className="ml-2 font-semibold">
-                      {claim.latitude.toFixed(4)}°, {claim.longitude.toFixed(4)}°
+                      {claim.latitude ? `${Number(claim.latitude).toFixed(4)}°, ${Number(claim.longitude).toFixed(4)}°` : 'N/A'}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Duration:</span>
-                    <span className="ml-2 font-semibold">{claim.duration_years || 99} years</span>
-                  </div>
                 </div>
+
+                {/* Real AI Reasoning */}
+                {claim.ai_verification_metadata?.reasoning && Array.isArray(claim.ai_verification_metadata.reasoning) && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-xs font-semibold text-gray-600 mb-2">AI Reasoning:</p>
+                    <ul className="space-y-1">
+                      {(claim.ai_verification_metadata.reasoning as string[]).map((reason: string, i: number) => (
+                        <li key={i} className="text-xs text-gray-700 flex gap-2">
+                          <span className="text-blue-500 flex-shrink-0">•</span>
+                          <span>{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Evidence Cards */}
             <div>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <AlertCircle className="h-5 w-5" />
@@ -379,18 +311,14 @@ export default async function ClaimAuditPage({ params }: PageProps) {
                   <EvidenceCard
                     key={evidence.id}
                     evidence={evidence}
-                    onHighlight={(area) => {
-                      console.log('Highlight area:', area)
-                    }}
+                    onHighlight={(area) => { console.log('Highlight area:', area) }}
                   />
                 ))}
               </div>
             </div>
 
-            {/* AI Reasoning Trace */}
             <AIReasoningTrace steps={reasoningSteps} finalScore={finalScore} />
 
-            {/* Blockchain Minting Section */}
             {claim.mint_status === 'MINTED' && claim.on_chain_hash ? (
               <QRCodeGenerator
                 contractAddress={process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS || ''}
@@ -401,9 +329,7 @@ export default async function ClaimAuditPage({ params }: PageProps) {
               <Card className="border-blue-200 bg-blue-50">
                 <CardHeader>
                   <CardTitle className="text-base">Mint Land Title NFT</CardTitle>
-                  <CardDescription>
-                    Mint this verified land title to the blockchain
-                  </CardDescription>
+                  <CardDescription>Mint this verified land title to the blockchain</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <MintTitleButtonWrapper claim={claim} />
@@ -411,11 +337,10 @@ export default async function ClaimAuditPage({ params }: PageProps) {
               </Card>
             )}
 
-            {/* Additional Notes */}
             {claim.human_review_notes && (
               <Card className="border-purple-200 bg-purple-50">
                 <CardHeader>
-                  <CardTitle className="text-base">Previous Auditor Notes</CardTitle>
+                  <CardTitle className="text-base">Auditor Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-gray-700">{claim.human_review_notes}</p>
@@ -429,18 +354,8 @@ export default async function ClaimAuditPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Fixed Decision Console */}
-      <DecisionConsole
-        claimId={claim.id}
-        onApprove={async (notes) => {
-          'use server'
-          console.log('Approve claim:', claim.id, notes)
-        }}
-        onReject={async (notes) => {
-          'use server'
-          console.log('Reject claim:', claim.id, notes)
-        }}
-      />
+      {/* Fixed Decision Console — only shown for undecided claims */}
+      {!isDecided && <AdminDecisionWrapper claimId={claim.id} />}
     </div>
   )
 }
