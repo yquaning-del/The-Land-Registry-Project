@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PLATFORM_OWNER_EMAIL = 'yquaning@gmail.com'
+const PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL || ''
 
 export async function middleware(request: NextRequest) {
   // Skip middleware if Supabase is not configured
@@ -65,6 +65,16 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Routes that require authentication (the (dashboard) route-group maps to these paths)
+  const PROTECTED_PREFIXES = [
+    '/dashboard',
+    '/claims',
+    '/verification-queue',
+    '/blockchain-ledger',
+    '/settings',
+    '/setup',
+  ]
+
   try {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -76,7 +86,7 @@ export async function middleware(request: NextRequest) {
 
       // Check if user is platform owner or has admin role
       const isPlatformOwner = user.email === PLATFORM_OWNER_EMAIL
-      
+
       if (!isPlatformOwner) {
         // Check database role — handle missing profile gracefully
         const { data: profile, error: profileError } = await supabase
@@ -89,8 +99,8 @@ export async function middleware(request: NextRequest) {
           console.warn('Could not fetch user profile for admin check:', profileError.message)
         }
 
-        const isAdmin = profile?.role === 'ADMIN' || 
-                        profile?.role === 'SUPER_ADMIN' || 
+        const isAdmin = profile?.role === 'ADMIN' ||
+                        profile?.role === 'SUPER_ADMIN' ||
                         profile?.role === 'PLATFORM_OWNER'
 
         if (!isAdmin) {
@@ -99,11 +109,13 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Protect dashboard routes
-    if (request.nextUrl.pathname.startsWith('/dashboard')) {
-      if (!user) {
-        return NextResponse.redirect(new URL('/sign-in', request.url))
-      }
+    // Protect all dashboard route-group pages
+    const isProtected = PROTECTED_PREFIXES.some(prefix =>
+      request.nextUrl.pathname === prefix ||
+      request.nextUrl.pathname.startsWith(prefix + '/')
+    )
+    if (isProtected && !user) {
+      return NextResponse.redirect(new URL('/sign-in', request.url))
     }
   } catch (error) {
     console.error('Middleware auth error:', error)
@@ -114,5 +126,18 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/dashboard/:path*'],
+  matcher: [
+    '/admin/:path*',
+    '/dashboard/:path*',
+    '/claims/:path*',
+    '/claims',
+    '/verification-queue/:path*',
+    '/verification-queue',
+    '/blockchain-ledger/:path*',
+    '/blockchain-ledger',
+    '/settings/:path*',
+    '/settings',
+    '/setup/:path*',
+    '/setup',
+  ],
 }

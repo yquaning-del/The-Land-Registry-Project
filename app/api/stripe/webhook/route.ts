@@ -36,6 +36,15 @@ export async function POST(request: NextRequest) {
           throw new Error('Missing metadata in checkout session')
         }
 
+        // Fetch the subscription to get accurate period dates
+        let periodStart = new Date().toISOString()
+        let periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        if (session.subscription) {
+          const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string)
+          periodStart = new Date(stripeSub.current_period_start * 1000).toISOString()
+          periodEnd = new Date(stripeSub.current_period_end * 1000).toISOString()
+        }
+
         // Create or update subscription
         await supabase.from('subscriptions').upsert({
           user_id: userId,
@@ -43,11 +52,11 @@ export async function POST(request: NextRequest) {
           stripe_subscription_id: session.subscription as string,
           plan_type: planType,
           status: 'active',
-          current_period_start: new Date().toISOString(),
-          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
         })
 
-        // Grant monthly credits
+        // Grant credits — idempotency key prevents double-granting on webhook replay
         const plan = getPlanDetails(planType)
         await supabase.rpc('add_credits', {
           p_user_id: userId,

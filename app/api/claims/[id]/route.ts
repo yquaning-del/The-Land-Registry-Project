@@ -26,7 +26,7 @@ export async function GET(
       .from('land_claims')
       .select('*')
       .eq('id', params.id)
-      .eq('user_id', user.id)
+      .eq('claimant_id', user.id)
       .single()
 
     if (error) {

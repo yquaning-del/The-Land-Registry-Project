@@ -96,13 +96,45 @@ async function uploadToSupabaseStorage(file: File) {
   }
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/tiff',
+]
+
 export async function POST(request: NextRequest) {
   try {
+    // Auth check must happen before any file processing or external uploads
+    const supabaseForAuth = await createClient()
+    const { data: { user }, error: authError } = await supabaseForAuth.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const form = await request.formData()
     const file = form.get('file')
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'file is required' }, { status: 400 })
+    }
+
+    // Server-side file size validation
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'File size must be less than 10MB' },
+        { status: 413 }
+      )
+    }
+
+    // Server-side MIME type validation
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: 'File must be a PDF or image (JPEG, PNG, WebP, TIFF)' },
+        { status: 415 }
+      )
     }
 
     // Try Pinata first, fall back to Supabase Storage

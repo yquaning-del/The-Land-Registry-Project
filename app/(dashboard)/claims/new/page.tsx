@@ -66,6 +66,7 @@ export default function NewClaimPage() {
   })
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   const handleSelectedFile = useCallback((selectedFile: File) => {
     if (selectedFile.size > 10 * 1024 * 1024) {
@@ -246,10 +247,7 @@ export default function NewClaimPage() {
       setError('Please select a document category (Land Title or Indenture)')
       return
     }
-    if (!formData.coordinates || formData.coordinates.trim().length === 0) {
-      setError('Please enter GPS coordinates (e.g., "5.6037, -0.1870")')
-      return
-    }
+    if (!validateForm()) return
 
     setLoading(true)
     setError('')
@@ -268,14 +266,12 @@ export default function NewClaimPage() {
         .replace(/[NSEW]/gi, '')
         .split(/[,\s]+/)
         .filter(Boolean)
-      if (parts.length < 2) {
-        throw new Error('Invalid GPS coordinates. Use "lat,lng" (e.g., "5.6037, -0.1870")')
+      if (parts.length < 2 || Number.isNaN(Number(parts[0])) || Number.isNaN(Number(parts[1]))) {
+        setFormErrors(prev => ({ ...prev, coordinates: 'Invalid format. Use "lat, lng" (e.g., "5.6037, -0.1870")' }))
+        return
       }
       const lat = Number(parts[0])
       const lng = Number(parts[1])
-      if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        throw new Error('Invalid GPS coordinates. Latitude and longitude must be numbers.')
-      }
 
       let publicUrl: string
 
@@ -365,6 +361,19 @@ export default function NewClaimPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
+    if (formErrors[name]) {
+      setFormErrors(prev => { const next = { ...prev }; delete next[name]; return next })
+    }
+  }
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {}
+    if (!formData.owner_name.trim()) errors.owner_name = 'Owner name is required'
+    if (!formData.location.trim()) errors.location = 'Locality / address is required'
+    if (documentCategory && !formData.title_type) errors.title_type = 'Please select a title type'
+    if (!formData.coordinates.trim()) errors.coordinates = 'GPS coordinates are required'
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
   const isIndenture = documentCategory === 'INDENTURE'
@@ -512,13 +521,14 @@ export default function NewClaimPage() {
                     value={formData.title_type}
                     onChange={handleInputChange}
                     required
-                    className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className={`mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 ${formErrors.title_type ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}`}
                   >
                     <option value="">Select type...</option>
                     {TITLE_SUB_TYPES[documentCategory].map(t => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
+                  {formErrors.title_type && <p className="mt-1 text-xs text-red-600">{formErrors.title_type}</p>}
                 </div>
               )}
 
@@ -543,7 +553,9 @@ export default function NewClaimPage() {
                     onChange={handleInputChange}
                     placeholder="e.g., Yaw Quaning"
                     required
+                    className={formErrors.owner_name ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : ''}
                   />
+                  {formErrors.owner_name && <p className="mt-1 text-xs text-red-600">{formErrors.owner_name}</p>}
                 </div>
               </div>
 
@@ -557,7 +569,9 @@ export default function NewClaimPage() {
                     onChange={handleInputChange}
                     placeholder={isIndenture ? 'e.g., Adumanya' : 'e.g., Plot 45, East Legon, Accra'}
                     required
+                    className={formErrors.location ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : ''}
                   />
+                  {formErrors.location && <p className="mt-1 text-xs text-red-600">{formErrors.location}</p>}
                 </div>
                 <div>
                   <Label htmlFor="district">District</Label>
@@ -591,7 +605,9 @@ export default function NewClaimPage() {
                     onChange={handleInputChange}
                     placeholder="e.g., 5.6037, -0.1870"
                     required
+                    className={formErrors.coordinates ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : ''}
                   />
+                  {formErrors.coordinates && <p className="mt-1 text-xs text-red-600">{formErrors.coordinates}</p>}
                 </div>
                 <div>
                   <Label htmlFor="land_size">Land Size (Acres or sqm)</Label>

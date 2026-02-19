@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { LanguageProvider } from '@/lib/i18n/LanguageProvider'
 import { AIChatbox } from '@/components/ai/AIChatbox'
 import { EnvironmentStatus } from '@/components/EnvironmentStatus'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export const metadata: Metadata = {
   title: 'Land Registry Platform - Blockchain Land Verification',
@@ -23,11 +24,15 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider>
           <LanguageProvider>
-            <ThirdwebProvider>
-              {children}
-              <AIChatbox />
-              <EnvironmentStatus />
-            </ThirdwebProvider>
+            <ErrorBoundary>
+              <ThirdwebProvider>
+                {children}
+                <ErrorBoundary fallback={<></>}>
+                  <AIChatbox />
+                </ErrorBoundary>
+                <EnvironmentStatus />
+              </ThirdwebProvider>
+            </ErrorBoundary>
           </LanguageProvider>
         </ThemeProvider>
       </body>

@@ -99,11 +99,19 @@ export default function ClaimDetailsPage() {
     const supabase = createClient()
 
     try {
-      // Get claim details
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        router.push('/sign-in')
+        return
+      }
+
+      // Get claim details — filter by claimant_id so users can only see their own claims
       const { data: claimData, error: claimError } = await supabase
         .from('land_claims')
         .select('*')
         .eq('id', params.id)
+        .eq('claimant_id', user.id)
         .single()
 
       if (claimError) throw claimError
@@ -186,17 +194,31 @@ export default function ClaimDetailsPage() {
 
   const getConfidenceBadge = (level: string | null, score: number | null) => {
     if (!level || score === null) return null
-    
+
     const colors: Record<string, string> = {
       HIGH: 'bg-emerald-500',
       MEDIUM: 'bg-yellow-500',
       LOW: 'bg-red-500',
     }
+    const barColors: Record<string, string> = {
+      HIGH: 'bg-emerald-500',
+      MEDIUM: 'bg-yellow-500',
+      LOW: 'bg-red-500',
+    }
+    const pct = (score * 100).toFixed(1)
 
     return (
-      <div className="flex items-center gap-2">
-        <Badge className={colors[level] || 'bg-gray-500'}>{level}</Badge>
-        <span className="text-sm text-gray-600">{(score * 100).toFixed(1)}%</span>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Badge className={colors[level] || 'bg-gray-500'}>{level}</Badge>
+          <span className="text-sm font-medium text-gray-700">{pct}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-1.5">
+          <div
+            className={`${barColors[level] || 'bg-gray-500'} h-1.5 rounded-full transition-all`}
+            style={{ width: `${Math.min(score * 100, 100)}%` }}
+          />
+        </div>
       </div>
     )
   }
@@ -248,10 +270,10 @@ export default function ClaimDetailsPage() {
               <h1 className="text-3xl font-bold text-navy-900 mb-2">Claim Details</h1>
               <p className="text-gray-600 font-mono text-sm">{claim.id}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {claim.ai_verification_status === 'PENDING_VERIFICATION' && (
-                <Button 
-                  onClick={startVerification} 
+                <Button
+                  onClick={startVerification}
                   disabled={verifying}
                   className="bg-emerald-600 hover:bg-emerald-700"
                 >
@@ -267,6 +289,18 @@ export default function ClaimDetailsPage() {
                     </>
                   )}
                 </Button>
+              )}
+              {(claim.ai_verification_status === 'AI_VERIFIED' || claim.ai_verification_status === 'APPROVED') && (
+                <a
+                  href={`/api/claims/${claim.id}/certificate`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Certificate
+                  </Button>
+                </a>
               )}
               {claim.mint_status === 'VERIFIED' && (
                 <Link href={`/blockchain-ledger/mint?claimId=${claim.id}`}>
@@ -356,16 +390,30 @@ export default function ClaimDetailsPage() {
               {claim.original_document_url && (
                 <div>
                   <div className="text-sm text-gray-600 mb-2">Document</div>
-                  <a 
-                    href={claim.original_document_url} 
-                    target="_blank" 
+                  <a
+                    href={claim.original_document_url}
+                    target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700"
+                    className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 mb-3"
                   >
                     <Download className="h-4 w-4" />
-                    View Document
+                    Open in New Tab
                     <ExternalLink className="h-3 w-3" />
                   </a>
+                  {/* Inline document preview */}
+                  {claim.original_document_url.match(/\.(jpe?g|png|webp)(\?|$)/i) ? (
+                    <img
+                      src={claim.original_document_url}
+                      alt="Land document preview"
+                      className="mt-2 w-full max-h-64 object-contain rounded border border-gray-200"
+                    />
+                  ) : (
+                    <iframe
+                      src={claim.original_document_url}
+                      title="Land document preview"
+                      className="mt-2 w-full h-64 rounded border border-gray-200"
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

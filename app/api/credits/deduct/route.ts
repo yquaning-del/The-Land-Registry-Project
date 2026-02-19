@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { rateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
-// POST - Deduct credits from user's balance
+const VALID_TYPES = ['VERIFICATION', 'MINT']
+
+// POST - Atomically deduct credits from user's balance
 export async function POST(request: NextRequest) {
+  // Rate limiting: 20 deductions per minute per user/IP
+  const rlResult = rateLimit(getClientIdentifier(request), { maxRequests: 20, windowMs: 60000 })
+  if (!rlResult.success) return rateLimitResponse(rlResult) as unknown as NextResponse
+
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -13,30 +20,19 @@ export async function POST(request: NextRequest) {
 
     const { amount, type, description, referenceId } = await request.json()
 
-    // Validate required fields
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
+    if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
+      return NextResponse.json({ error: 'Amount must be a positive integer' }, { status: 400 })
     }
 
-    if (!type || !['VERIFICATION', 'MINT'].includes(type)) {
-      return NextResponse.json({ error: 'Invalid type. Must be VERIFICATION or MINT' }, { status: 400 })
-    }
-
-    // Check if user has sufficient credits
-    const { data: hasCredits } = await supabase.rpc('has_sufficient_credits', {
-      p_user_id: user.id,
-      p_required_amount: amount,
-    } as any)
-
-    if (!hasCredits) {
+    if (!type || !VALID_TYPES.includes(type)) {
       return NextResponse.json(
-        { error: 'Insufficient credits', code: 'INSUFFICIENT_CREDITS' },
-        { status: 402 }
+        { error: `Invalid type. Must be one of: ${VALID_TYPES.join(', ')}` },
+        { status: 400 }
       )
     }
 
-    // Deduct credits
-    const { data: newBalance, error: deductError } = await supabase.rpc('deduct_credits', {
+    // Use atomic RPC to check and deduct in one transaction (prevents race conditions)
+    const { data: result, error: rpcError } = await supabase.rpc('deduct_credits_atomic', {
       p_user_id: user.id,
       p_amount: amount,
       p_type: type,
@@ -44,20 +40,35 @@ export async function POST(request: NextRequest) {
       p_reference_id: referenceId || null,
     } as any)
 
-    if (deductError) {
-      console.error('Deduct credits error:', deductError)
-      throw new Error(deductError.message || 'Failed to deduct credits')
+    if (rpcError) {
+      console.error('Atomic deduct credits error:', rpcError)
+      throw new Error(rpcError.message || 'Failed to deduct credits')
+    }
+
+    const deductResult = result as { success: boolean; error?: string; new_balance?: number; balance?: number; required?: number }
+
+    if (!deductResult?.success) {
+      const isInsufficient = deductResult?.error === 'Insufficient credits'
+      return NextResponse.json(
+        {
+          error: deductResult?.error || 'Failed to deduct credits',
+          code: isInsufficient ? 'INSUFFICIENT_CREDITS' : 'DEDUCT_FAILED',
+          balance: deductResult?.balance,
+          required: deductResult?.required,
+        },
+        { status: isInsufficient ? 402 : 500 }
+      )
     }
 
     return NextResponse.json({
       success: true,
-      newBalance,
+      newBalance: deductResult.new_balance,
       deducted: amount,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deducting credits:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to deduct credits' },
+      { error: error instanceof Error ? error.message : 'Failed to deduct credits' },
       { status: 500 }
     )
   }
