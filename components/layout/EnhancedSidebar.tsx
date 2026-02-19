@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
   },
   {
     title: 'Setup',
-    href: '/dashboard/setup',
+    href: '/setup',
     icon: Settings,
     description: 'Platform configuration and getting started',
   },

@@ -180,7 +180,7 @@ export function OnboardingGuide() {
         
         <div className="pt-4 border-t">
           <div className="flex gap-3">
-            <Link href="/dashboard/setup">
+            <Link href="/setup">
               <Button variant="outline" className="flex-1">
                 View Setup Guide
               </Button>

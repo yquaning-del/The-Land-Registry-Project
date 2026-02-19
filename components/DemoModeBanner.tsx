@@ -4,14 +4,16 @@ import { useState } from 'react'
 import { AlertCircle, X, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export function DemoModeBanner() {
+interface DemoModeBannerProps {
+  hasOpenAI: boolean
+  hasPinata: boolean
+  hasThirdweb: boolean
+}
+
+export function DemoModeBanner({ hasOpenAI, hasPinata, hasThirdweb }: DemoModeBannerProps) {
   const [dismissed, setDismissed] = useState(false)
 
   if (dismissed) return null
-
-  const hasOpenAI = !!process.env.OPENAI_API_KEY
-  const hasPinata = !!process.env.PINATA_JWT
-  const hasThirdweb = !!process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID
 
   if (hasOpenAI && hasPinata && hasThirdweb) return null
 
@@ -33,7 +35,7 @@ export function DemoModeBanner() {
           </p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <a href="/dashboard/setup">
+              <a href="/setup">
                 Configure Services
               </a>
             </Button>
