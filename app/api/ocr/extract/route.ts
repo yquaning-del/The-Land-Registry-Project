@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-type OCRExtractResponse = {
-  text: string
-}
-
-function getOpenAIKey() {
-  return process.env.OPENAI_API_KEY
-}
+import { createClient } from '@/lib/supabase/server'
+import { analyzeDocumentWithGPT4, isOpenAIConfigured } from '@/lib/ai/openai'
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = getOpenAIKey()
-    if (!apiKey) {
-      return NextResponse.json({ error: 'OPENAI_API_KEY not configured' }, { status: 400 })
+    // Auth check — prevent unauthenticated OpenAI credit consumption
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = (await request.json()) as { imageDataUrl?: string }
@@ -25,47 +21,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    // Strip the data URL prefix to get raw base64 for the AI module
+    const base64 = imageDataUrl.split(',')[1]
+    if (!base64) {
+      return NextResponse.json({ error: 'Invalid image data' }, { status: 400 })
+    }
+
+    // analyzeDocumentWithGPT4 uses GPT-4o when configured, falls back to regex when not
+    const analysis = await analyzeDocumentWithGPT4({ imageBase64: base64 })
+
+    return NextResponse.json({
+      text: analysis.extractedText,
+      aiPowered: isOpenAIConfigured(),
+      fields: {
+        ownerName: analysis.granteeName || null,
+        grantorName: analysis.grantorName || null,
+        parcelId: analysis.parcelId || analysis.plotNumber || null,
+        location: analysis.location || null,
+        documentType: analysis.documentType || null,
+        issueDate: analysis.issueDate || null,
+        durationYears: analysis.durationYears || null,
       },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        temperature: 0,
-        max_tokens: 1500,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You extract text from documents. Return ONLY the extracted text, no commentary, no markdown.',
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Extract all text visible in this document image.' },
-              { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
-            ],
-          },
-        ],
-      }),
     })
-
-    if (!res.ok) {
-      const text = await res.text()
-      return NextResponse.json({ error: `OpenAI OCR failed: ${res.status} ${text}` }, { status: 502 })
-    }
-
-    const data = (await res.json()) as any
-    const content = data?.choices?.[0]?.message?.content
-
-    const response: OCRExtractResponse = {
-      text: typeof content === 'string' ? content.trim() : '',
-    }
-
-    return NextResponse.json(response)
   } catch (error: any) {
+    console.error('OCR extract error:', error)
     return NextResponse.json({ error: error?.message || 'OCR extract failed' }, { status: 500 })
   }
 }

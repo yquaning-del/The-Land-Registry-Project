@@ -176,7 +176,7 @@ export default function NewClaimPage() {
     }
 
     if (file.type.includes('pdf')) {
-      setError('Auto-fill currently supports JPG/PNG images (PDF extraction not enabled yet)')
+      setError('Auto-fill currently supports JPG/PNG images. Please convert your PDF to an image first.')
       return
     }
 
@@ -198,18 +198,57 @@ export default function NewClaimPage() {
       })
 
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text)
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error || 'Auto-fill failed')
       }
 
-      const data = (await res.json()) as { text?: string }
-      fillFromExtractedText(data.text || '')
+      const data = (await res.json()) as {
+        text?: string
+        aiPowered?: boolean
+        fields?: {
+          ownerName?: string | null
+          grantorName?: string | null
+          parcelId?: string | null
+          location?: string | null
+          documentType?: string | null
+          issueDate?: string | null
+          durationYears?: number | null
+        }
+      }
+
+      // Use structured AI fields when available — much more reliable than client regex
+      if (data.fields) {
+        const f = data.fields
+
+        // Auto-detect document category from AI-identified type
+        if (f.documentType && !documentCategory) {
+          const dt = f.documentType.toLowerCase()
+          if (/indenture|plan of land|customary freehold/.test(dt)) {
+            setDocumentCategory('INDENTURE')
+          } else if (/certificate|deed|consent|freehold|leasehold|land title/.test(dt)) {
+            setDocumentCategory('LAND_TITLE')
+          }
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          owner_name: prev.owner_name || f.ownerName || '',
+          parcel_id: prev.parcel_id || f.parcelId || '',
+          location: prev.location || f.location || '',
+          duration_years: prev.duration_years || (f.durationYears ? String(f.durationYears) : ''),
+        }))
+      }
+
+      // Also run regex pass on raw text to pick up any remaining fields (coords, region, etc.)
+      if (data.text) {
+        fillFromExtractedText(data.text)
+      }
     } catch (e: any) {
       setError(e?.message || 'Auto-fill failed')
     } finally {
       setExtracting(false)
     }
-  }, [file, fillFromExtractedText])
+  }, [file, fillFromExtractedText, documentCategory])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
