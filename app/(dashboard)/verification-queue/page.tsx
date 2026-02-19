@@ -154,7 +154,7 @@ export default function VerificationQueuePage() {
                             )}
                           </div>
 
-                          <Link href={`/admin/claims/${claim.id}`}>
+                          <Link href={`/claims/${claim.id}`}>
                             <Button variant={isHumanReview ? 'default' : 'outline'} size="sm" className={isHumanReview ? 'bg-blue-600 hover:bg-blue-700' : ''}>
                               <Eye className="h-4 w-4 mr-1" />
                               Review

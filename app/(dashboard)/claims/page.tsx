@@ -125,7 +125,7 @@ export default function ClaimsPage() {
             <h1 className="text-4xl font-bold text-navy-900 mb-2">My Land Claims</h1>
             <p className="text-gray-600">Manage and track your land verification claims</p>
           </div>
-          <Link href="/dashboard/claims/new">
+          <Link href="/claims/new">
             <Button className="bg-emerald-600 hover:bg-emerald-700">
               <Upload className="h-4 w-4 mr-2" />
               New Claim
@@ -259,7 +259,7 @@ export default function ClaimsPage() {
               <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No claims yet</h3>
               <p className="text-gray-600 mb-4">Submit your first land title claim to get started</p>
-              <Link href="/dashboard/claims/new">
+              <Link href="/claims/new">
                 <Button className="bg-emerald-600 hover:bg-emerald-700">
                   <Upload className="h-4 w-4 mr-2" />
                   Submit First Claim
@@ -305,7 +305,7 @@ export default function ClaimsPage() {
                       <p className="text-sm">{new Date(claim.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="flex gap-2 pt-3">
-                      <Link href={`/dashboard/claims/${claim.id}`}>
+                      <Link href={`/claims/${claim.id}`}>
                         <Button size="sm" variant="outline" className="flex-1">
                           <Eye className="h-4 w-4 mr-1" />
                           View
