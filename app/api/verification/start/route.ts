@@ -83,16 +83,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Claim is already verified' }, { status: 400 })
     }
 
-    // Update status to processing
-    const { error: processingError } = await supabase
-      .from('land_claims')
-      .update({ ai_verification_status: 'PROCESSING' } as any)
-      .eq('id', claimId)
-
-    if (processingError) {
-      console.error('Failed to set claim to PROCESSING:', processingError)
-      return NextResponse.json({ error: 'Failed to start verification' }, { status: 500 })
-    }
+    // Note: 'PROCESSING' is not in the claim_status enum (migration 010 targeted wrong type).
+    // The button's loading state provides sufficient in-progress feedback to the user.
+    // A future migration can add PROCESSING to claim_status if a persistent status is needed.
 
     let result: Awaited<ReturnType<EnhancedVerificationPipeline['execute']>>
     try {

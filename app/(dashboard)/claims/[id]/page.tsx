@@ -87,6 +87,7 @@ export default function ClaimDetailsPage() {
   const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([])
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
   useEffect(() => {
     if (params.id) {
@@ -135,6 +136,7 @@ export default function ClaimDetailsPage() {
   const startVerification = async () => {
     if (!claim) return
     setVerifying(true)
+    setVerificationError(null)
 
     try {
       const response = await fetch('/api/verification/start', {
@@ -149,11 +151,11 @@ export default function ClaimDetailsPage() {
         throw new Error(data.error || 'Verification failed')
       }
 
-      // Reload claim details
+      // Reload claim details to reflect new status
       await loadClaimDetails()
     } catch (error: any) {
       console.error('Verification error:', error)
-      alert(error.message || 'Verification failed')
+      setVerificationError(error.message || 'Verification failed. Please try again.')
     } finally {
       setVerifying(false)
     }
@@ -313,6 +315,17 @@ export default function ClaimDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Verification error banner */}
+        {verificationError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-700 font-medium">Verification failed</p>
+              <p className="text-red-600 text-sm mt-0.5">{verificationError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
