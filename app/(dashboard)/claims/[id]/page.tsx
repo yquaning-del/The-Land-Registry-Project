@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
+
+const SingleClaimMap = dynamic(
+  () => import('@/components/claims/SingleClaimMap'),
+  { ssr: false, loading: () => <div className="h-[280px] bg-slate-800 rounded-lg animate-pulse" /> }
+)
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +33,7 @@ import {
   Building,
   ScrollText,
   Ruler,
+  Sparkles,
 } from 'lucide-react'
 
 interface ClaimDetails {
@@ -60,6 +67,7 @@ interface ClaimDetails {
   document_serial_number: string | null
   lands_commission_file_number: string | null
   duration_years: number | null
+  polygon_coordinates: number[][] | null
   created_at: string
   updated_at: string
   verification_result?: any
@@ -78,6 +86,34 @@ interface VerificationResult {
   ai_powered: boolean | null
   reasoning: string[] | null
   created_at: string
+}
+
+function generateVerificationNarrative(claim: ClaimDetails, result: any): string {
+  const location = [claim.address, claim.region, claim.country].filter(Boolean).join(', ')
+  const titleType = claim.title_type?.replace(/_/g, ' ').toLowerCase() ?? null
+  const pct = Math.round((result.confidence ?? 0) * 100)
+
+  const opening = `Your${titleType ? ` ${titleType}` : ''} land claim${location ? ` at ${location}` : ''} was processed through our 5-stage AI verification pipeline.`
+
+  const docScore: number | null = result.breakdown?.documentAnalysis ?? null
+  const docSentence =
+    docScore !== null && docScore >= 0.65
+      ? `The document passed automated analysis with a ${Math.round(docScore * 100)}% authenticity score.`
+      : 'The document image could not be retrieved for automated analysis — a specialist will review the original directly.'
+
+  const fraudSentence =
+    result.fraudDetection?.isFraudulent
+      ? `Potential fraud indicators were flagged: ${(result.fraudDetection.indicators as string[]).join(', ')}.`
+      : 'No fraud indicators or spatial conflicts were detected in the registry.'
+
+  const nextStep: Record<string, string> = {
+    AI_VERIFIED: `The claim has been AI-verified with ${pct}% confidence and is ready for minting on the blockchain.`,
+    PENDING_HUMAN_REVIEW: `The claim has been queued for human review (${pct}% confidence). A verification specialist will assess it within 2–5 business days.`,
+    REJECTED: `The claim could not be verified (${pct}% confidence). Please contact support or re-submit with clearer documentation.`,
+  }
+  const recommendation = nextStep[result.status as string] ?? `Verification complete (${pct}% confidence).`
+
+  return [opening, docSentence, fraudSentence, recommendation].join(' ')
 }
 
 export default function ClaimDetailsPage() {
@@ -401,6 +437,39 @@ export default function ClaimDetailsPage() {
                 </button>
               )}
             </div>
+
+            {/* AI Summary — shown once pipeline has completed */}
+            {verificationResult && !verifying && (
+              <div className="px-5 pt-4">
+                <div className="bg-slate-800/60 rounded-lg p-4 border border-blue-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-blue-400">AI Summary</span>
+                  </div>
+                  <p className="text-sm text-gray-300 leading-relaxed">
+                    {generateVerificationNarrative(claim!, verificationResult)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Land Location Map — shown once pipeline has completed */}
+            {verificationResult && !verifying && claim?.latitude && claim?.longitude && (
+              <div className="px-5 pt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-400">Land Location</span>
+                </div>
+                <div className="rounded-lg overflow-hidden border border-slate-700">
+                  <SingleClaimMap
+                    lat={claim.latitude}
+                    lng={claim.longitude}
+                    polygon={claim.polygon_coordinates as number[][] | null}
+                    address={claim.address}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Stages */}
             <div className="px-5 py-4 space-y-3">
