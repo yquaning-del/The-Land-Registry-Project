@@ -57,24 +57,26 @@ export default function AdminAnalyticsPage() {
         .select('*', { count: 'exact', head: true })
 
       // Get claims data
-      const { data: claims } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: claims } = await (supabase as any)
         .from('land_claims')
-        .select('verification_status, created_at')
+        .select('ai_verification_status, created_at')
 
-      const claimsData = claims || []
-      const verified = claimsData.filter(c => c.verification_status === 'VERIFIED').length
-      const pending = claimsData.filter(c => c.verification_status === 'PENDING').length
-      const disputed = claimsData.filter(c => c.verification_status === 'DISPUTED').length
+      const claimsData: any[] = claims || []
+      const verified = claimsData.filter((c: any) => c.ai_verification_status === 'AI_VERIFIED' || c.ai_verification_status === 'APPROVED').length
+      const pending = claimsData.filter((c: any) => c.ai_verification_status === 'PENDING_VERIFICATION').length
+      const disputed = claimsData.filter((c: any) => c.ai_verification_status === 'DISPUTED' || c.ai_verification_status === 'REJECTED').length
 
       // Get credit transactions
-      const { data: transactions } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: transactions } = await (supabase as any)
         .from('credit_transactions')
         .select('amount, type')
 
-      const transactionsData = transactions || []
+      const transactionsData: any[] = transactions || []
       const creditsUsed = transactionsData
-        .filter(t => t.type === 'VERIFICATION' || t.type === 'MINT')
-        .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0)
+        .filter((t: any) => t.type === 'VERIFICATION' || t.type === 'MINT')
+        .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0)
 
       // Calculate claims by month (last 6 months)
       const monthlyData: { [key: string]: number } = {}

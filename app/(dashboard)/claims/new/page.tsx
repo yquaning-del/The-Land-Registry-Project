@@ -294,6 +294,21 @@ export default function NewClaimPage() {
     setLoading(true)
     setError('')
 
+    // Parse coordinates before any async DB calls so invalid input aborts immediately
+    const coordText = formData.coordinates.trim()
+    const coordParts = coordText
+      .replace(/°/g, '')
+      .replace(/[NSEW]/gi, '')
+      .split(/[,\s]+/)
+      .filter(Boolean)
+    if (coordParts.length < 2 || Number.isNaN(Number(coordParts[0])) || Number.isNaN(Number(coordParts[1]))) {
+      setFormErrors(prev => ({ ...prev, coordinates: 'Invalid format. Use "lat, lng" (e.g., "5.6037, -0.1870")' }))
+      setLoading(false)
+      return
+    }
+    const lat = Number(coordParts[0])
+    const lng = Number(coordParts[1])
+
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -305,7 +320,8 @@ export default function NewClaimPage() {
       // Ensure user_profiles row exists — users who signed up before migration 011
       // was applied won't have one, causing the FK constraint on land_claims to fail.
       // ignoreDuplicates: true → ON CONFLICT DO NOTHING (INSERT permission only, safe).
-      await supabase.from('user_profiles').upsert(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from('user_profiles') as any).upsert(
         {
           id: user.id,
           full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '',
@@ -314,19 +330,6 @@ export default function NewClaimPage() {
         },
         { onConflict: 'id', ignoreDuplicates: true }
       )
-
-      const coordText = formData.coordinates.trim()
-      const parts = coordText
-        .replace(/°/g, '')
-        .replace(/[NSEW]/gi, '')
-        .split(/[,\s]+/)
-        .filter(Boolean)
-      if (parts.length < 2 || Number.isNaN(Number(parts[0])) || Number.isNaN(Number(parts[1]))) {
-        setFormErrors(prev => ({ ...prev, coordinates: 'Invalid format. Use "lat, lng" (e.g., "5.6037, -0.1870")' }))
-        return
-      }
-      const lat = Number(parts[0])
-      const lng = Number(parts[1])
 
       let publicUrl: string
 
@@ -399,10 +402,10 @@ export default function NewClaimPage() {
         insertPayload.duration_years = formData.duration_years ? parseInt(formData.duration_years, 10) : null
       }
 
-      const { error: claimError } = await supabase
-        .from('land_claims')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: newClaim, error: claimError } = await (supabase.from('land_claims') as any)
         .insert(insertPayload)
-        .select()
+        .select('id')
         .single()
 
       if (claimError) {
@@ -411,7 +414,7 @@ export default function NewClaimPage() {
         throw new Error(claimError.message || 'Database insert failed')
       }
 
-      router.push('/claims')
+      router.push(`/claims/${newClaim.id}`)
     } catch (error) {
       console.error('Error creating claim:', error)
       setError(error instanceof Error ? error.message : 'Failed to create claim')

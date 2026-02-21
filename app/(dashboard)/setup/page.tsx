@@ -20,12 +20,13 @@ export default function SetupPage() {
         const { data: { user } } = await supabase.auth.getUser()
         
         if (user) {
-          const { data: creditsData } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: creditsData } = await (supabase as any)
             .from('credits')
             .select('balance')
             .eq('user_id', user.id)
             .single()
-          
+
           if (creditsData) {
             setCredits(creditsData.balance)
           }
@@ -193,11 +194,11 @@ export default function SetupPage() {
                     Start First Verification
                   </Button>
                 </Link>
-                <Button variant="outline" asChild>
-                  <Link href="/docs/platform-deep-dive">
+                <Link href="/docs/platform-deep-dive">
+                  <Button variant="outline">
                     View Documentation
-                  </Link>
-                </Button>
+                  </Button>
+                </Link>
               </div>
             </div>
           </CardContent>

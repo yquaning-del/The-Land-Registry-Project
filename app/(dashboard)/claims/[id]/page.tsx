@@ -95,8 +95,15 @@ export default function ClaimDetailsPage() {
     }
   }, [params.id])
 
-  const loadClaimDetails = async () => {
-    setLoading(true)
+  // Poll for status updates every 5 seconds while verification is running (silent — no spinner)
+  useEffect(() => {
+    if (!verifying) return
+    const interval = setInterval(() => loadClaimDetails(true), 5000)
+    return () => clearInterval(interval)
+  }, [verifying])
+
+  const loadClaimDetails = async (silent = false) => {
+    if (!silent) setLoading(true)
     const supabase = createClient()
 
     try {
@@ -274,23 +281,30 @@ export default function ClaimDetailsPage() {
             </div>
             <div className="flex gap-2 flex-wrap">
               {claim.ai_verification_status === 'PENDING_VERIFICATION' && (
-                <Button
-                  onClick={startVerification}
-                  disabled={verifying}
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                >
-                  {verifying ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="h-4 w-4 mr-2" />
-                      Start Verification
-                    </>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    onClick={startVerification}
+                    disabled={verifying}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    {verifying ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Start Verification
+                      </>
+                    )}
+                  </Button>
+                  {verifying && (
+                    <p className="text-xs text-gray-500">
+                      AI pipeline running — this may take up to 60 seconds
+                    </p>
                   )}
-                </Button>
+                </div>
               )}
               {(claim.ai_verification_status === 'AI_VERIFIED' || claim.ai_verification_status === 'APPROVED') && (
                 <a

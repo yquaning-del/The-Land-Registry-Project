@@ -47,22 +47,23 @@ export default function AdminUsersPage() {
     const supabase = createClient()
 
     try {
-      const { data, error } = await supabase
-        .from('users')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('user_profiles')
         .select('*')
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
-      const userData = data || []
+      const userData: any[] = data || []
       setUsers(userData)
 
       // Calculate stats
       setStats({
         total: userData.length,
-        admins: userData.filter(u => u.role === 'ADMIN').length,
-        verifiers: userData.filter(u => u.role === 'VERIFIER').length,
-        users: userData.filter(u => u.role === 'USER').length,
+        admins: userData.filter((u: any) => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN').length,
+        verifiers: userData.filter((u: any) => u.role === 'VERIFIER').length,
+        users: userData.filter((u: any) => u.role === 'CLAIMANT').length,
       })
     } catch (error) {
       console.error('Error loading users:', error)

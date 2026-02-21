@@ -108,6 +108,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       user_profiles: {
         Row: {
@@ -137,6 +138,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       land_claims: {
         Row: {
@@ -298,6 +300,7 @@ export interface Database {
           updated_at?: string
           deleted_at?: string | null
         }
+        Relationships: []
       }
       verification_logs: {
         Row: {
@@ -336,6 +339,7 @@ export interface Database {
           error_message?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       claim_disputes: {
         Row: {
@@ -374,6 +378,7 @@ export interface Database {
           created_at?: string
           resolved_at?: string | null
         }
+        Relationships: []
       }
       users: {
         Row: {
@@ -406,6 +411,7 @@ export interface Database {
           updated_at?: string
           last_sign_in_at?: string | null
         }
+        Relationships: []
       }
       subscriptions: {
         Row: {
@@ -444,6 +450,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       credit_transactions: {
         Row: {
@@ -476,6 +483,31 @@ export interface Database {
           balance_after?: number | null
           created_at?: string
         }
+        Relationships: []
+      }
+      credits: {
+        Row: {
+          id: string
+          user_id: string
+          balance: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       verification_results: {
         Row: {
@@ -487,6 +519,11 @@ export interface Database {
           document_analysis_score: number | null
           gps_validation_score: number | null
           cross_reference_score: number | null
+          fraud_detection_score: number | null
+          tampering_check_score: number | null
+          ai_powered: boolean | null
+          reasoning: string[] | null
+          fraud_indicators: string[] | null
           created_at: string
         }
         Insert: {
@@ -498,6 +535,11 @@ export interface Database {
           document_analysis_score?: number | null
           gps_validation_score?: number | null
           cross_reference_score?: number | null
+          fraud_detection_score?: number | null
+          tampering_check_score?: number | null
+          ai_powered?: boolean | null
+          reasoning?: string[] | null
+          fraud_indicators?: string[] | null
           created_at?: string
         }
         Update: {
@@ -509,8 +551,14 @@ export interface Database {
           document_analysis_score?: number | null
           gps_validation_score?: number | null
           cross_reference_score?: number | null
+          fraud_detection_score?: number | null
+          tampering_check_score?: number | null
+          ai_powered?: boolean | null
+          reasoning?: string[] | null
+          fraud_indicators?: string[] | null
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: {

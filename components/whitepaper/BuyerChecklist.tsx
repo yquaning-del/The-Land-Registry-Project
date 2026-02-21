@@ -158,7 +158,7 @@ export function BuyerChecklist() {
         {allCriticalChecked ? (
           <div className="flex items-center gap-3 text-emerald-700">
             <Shield className="h-5 w-5" />
-            <span className="font-semibold">All critical items verified! You're ready to proceed safely.</span>
+            <span className="font-semibold">All critical items verified! You&apos;re ready to proceed safely.</span>
           </div>
         ) : (
           <div className="flex items-center gap-3 text-amber-700">

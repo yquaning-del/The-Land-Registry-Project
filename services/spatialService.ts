@@ -25,7 +25,11 @@ import {
 } from '@/types/spatial.types'
 
 export class SpatialConflictService {
-  private supabase = createClient()
+  private supabase: ReturnType<typeof createClient>
+
+  constructor(supabaseClient?: ReturnType<typeof createClient>) {
+    this.supabase = supabaseClient ?? createClient()
+  }
 
   private getApiBaseUrl(): string {
     if (typeof window !== 'undefined') return ''

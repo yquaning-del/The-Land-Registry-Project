@@ -5,6 +5,9 @@ import { isOpenAIConfigured } from '@/lib/ai/openai'
 import { rateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 import { sendVerificationCompleteEmail } from '@/lib/email/sender'
 
+// Allow up to 60 seconds for the GPT-4 Vision pipeline on Vercel
+export const maxDuration = 60
+
 type LandClaim = {
   id: string
   ai_verification_status?: string
@@ -89,8 +92,9 @@ export async function POST(request: NextRequest) {
 
     let result: Awaited<ReturnType<EnhancedVerificationPipeline['execute']>>
     try {
-      // Run enhanced AI verification pipeline
-      const pipeline = new EnhancedVerificationPipeline()
+      // Run enhanced AI verification pipeline, injecting the server Supabase client
+      // so SpatialConflictService uses authenticated DB queries instead of browser anon client
+      const pipeline = new EnhancedVerificationPipeline(supabase)
       result = await pipeline.execute({
         claimId: claimData.id,
         documentUrl: claimData.original_document_url || undefined,

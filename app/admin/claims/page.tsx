@@ -87,18 +87,18 @@ export default function AdminClaimsPage() {
       setClaims((data || []) as unknown as LandClaim[])
       setTotalFiltered(count || 0)
 
-      const all = allStatusData || []
+      const all: any[] = allStatusData || []
       setStats({
         total: all.length,
-        pending: all.filter(c =>
+        pending: all.filter((c: any) =>
           c.ai_verification_status === 'PENDING_VERIFICATION' ||
           c.ai_verification_status === 'PENDING_HUMAN_REVIEW'
         ).length,
-        verified: all.filter(c =>
+        verified: all.filter((c: any) =>
           c.ai_verification_status === 'AI_VERIFIED' ||
           c.ai_verification_status === 'APPROVED'
         ).length,
-        disputed: all.filter(c =>
+        disputed: all.filter((c: any) =>
           c.ai_verification_status === 'DISPUTED' ||
           c.ai_verification_status === 'REJECTED'
         ).length,

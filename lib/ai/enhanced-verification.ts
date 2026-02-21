@@ -235,12 +235,12 @@ export class EnhancedVerificationPipeline {
   private gpsAgent: EnhancedGPSValidationAgent
   private spatialService: SpatialConflictService
 
-  constructor() {
+  constructor(supabaseClient?: any) {
     this.documentAgent = new EnhancedDocumentAnalysisAgent()
     this.fraudAgent = new EnhancedFraudDetectionAgent()
     this.tamperingAgent = new TamperingDetectionAgent()
     this.gpsAgent = new EnhancedGPSValidationAgent()
-    this.spatialService = new SpatialConflictService()
+    this.spatialService = new SpatialConflictService(supabaseClient)
   }
 
   async execute(input: EnhancedVerificationInput): Promise<EnhancedVerificationResult> {
@@ -409,5 +409,3 @@ export class EnhancedVerificationPipeline {
   }
 }
 
-// Export singleton instance
-export const enhancedVerificationPipeline = new EnhancedVerificationPipeline()

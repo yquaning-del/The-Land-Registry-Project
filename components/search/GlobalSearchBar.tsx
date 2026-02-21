@@ -158,7 +158,7 @@ export function GlobalSearchBar() {
 
       {showResults && results.length === 0 && !loading && query.length >= 2 && (
         <div className="absolute top-full mt-2 w-full backdrop-blur-lg bg-white/95 border border-white/20 rounded-lg shadow-2xl z-50 p-4 text-center text-gray-500">
-          No results found for "{query}"
+          No results found for &ldquo;{query}&rdquo;
         </div>
       )}
     </div>
