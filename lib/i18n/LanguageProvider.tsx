@@ -16,7 +16,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('locale') as Locale | null
-    if (stored && (stored === 'en' || stored === 'fr')) {
+    if (stored && (['en', 'fr', 'pt', 'es'] as string[]).includes(stored)) {
       setLocaleState(stored)
     }
   }, [])

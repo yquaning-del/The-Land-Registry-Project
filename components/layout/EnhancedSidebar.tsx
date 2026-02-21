@@ -139,7 +139,7 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return
 
-      // Check admin role
+      // Check admin role via DB
       supabase
         .from('user_profiles')
         .select('role')
@@ -150,6 +150,12 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
             setIsAdmin(true)
           }
         })
+
+      // Email bypass for platform owner (resilience: works even if DB role not yet set)
+      const ownerEmail = process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL
+      if (ownerEmail && data.user.email === ownerEmail) {
+        setIsAdmin(true)
+      }
 
       // Pending claim count badge
       supabase

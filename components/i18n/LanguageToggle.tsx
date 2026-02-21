@@ -11,8 +11,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 const languages = [
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'en', name: 'English',    flag: '🇬🇧' },
+  { code: 'fr', name: 'Français',   flag: '🇫🇷' },
+  { code: 'pt', name: 'Português',  flag: '🇧🇷' },
+  { code: 'es', name: 'Español',    flag: '🇪🇸' },
 ] as const
 
 export function LanguageToggle() {
