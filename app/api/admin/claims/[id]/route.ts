@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { sendVerificationCompleteEmail } from '@/lib/email/sender'
 
 // PATCH - Admin approve or reject a claim
 export async function PATCH(
@@ -43,7 +45,7 @@ export async function PATCH(
     // Fetch the claim to ensure it exists
     const { data: claim, error: claimError } = await supabase
       .from('land_claims')
-      .select('id, ai_verification_status, mint_status')
+      .select('id, ai_verification_status, mint_status, claimant_id, ai_confidence_score')
       .eq('id', claimId)
       .single()
 
@@ -85,6 +87,37 @@ export async function PATCH(
         notes: notes.trim(),
         created_at: now,
       } as any)
+
+    // Non-blocking email notification to claimant
+    // Requires SUPABASE_SERVICE_ROLE_KEY env var to look up the claimant's auth email
+    try {
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (serviceRoleKey && supabaseUrl && claim.claimant_id) {
+        const adminClient = createSupabaseClient(supabaseUrl, serviceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+        const { data: claimantUser } = await adminClient.auth.admin.getUserById(claim.claimant_id)
+        const { data: claimantProfile } = await supabase
+          .from('user_profiles')
+          .select('full_name')
+          .eq('id', claim.claimant_id)
+          .single()
+
+        if (claimantUser?.user?.email) {
+          sendVerificationCompleteEmail(claimantUser.user.email, {
+            userName: claimantProfile?.full_name || claimantUser.user.email,
+            claimId,
+            verificationStatus: newStatus,
+            confidenceScore: claim.ai_confidence_score || 0,
+          }).catch((err: unknown) => console.error('Admin decision email error:', err))
+        }
+      } else if (!serviceRoleKey) {
+        console.warn('[admin/claims] SUPABASE_SERVICE_ROLE_KEY not set — skipping claimant email notification')
+      }
+    } catch (emailErr) {
+      console.error('Failed to send admin decision email:', emailErr)
+    }
 
     return NextResponse.json({
       success: true,

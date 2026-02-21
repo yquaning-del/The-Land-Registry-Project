@@ -14,14 +14,31 @@ interface SearchResult {
   created_at: string
   claimant_name?: string
   region: string | null
+  address: string | null
+  blockchain_tx_hash: string | null
 }
 
-export function GlobalSearchBar() {
+interface GlobalSearchBarProps {
+  /** 'admin' links to /admin/claims/:id (default); 'user' links to /claims/:id and scopes by claimant_id */
+  variant?: 'admin' | 'user'
+}
+
+export function GlobalSearchBar({ variant = 'admin' }: GlobalSearchBarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [showResults, setShowResults] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+
+  // Fetch current user id once for user-scoped search
+  useEffect(() => {
+    if (variant !== 'user') return
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id)
+    })
+  }, [variant])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -45,19 +62,31 @@ export function GlobalSearchBar() {
     }, 300)
 
     return () => clearTimeout(debounceTimer)
-  }, [query])
+  }, [query, userId])
 
   async function performSearch(searchQuery: string) {
     setLoading(true)
     const supabase = createClient()
 
     try {
-      // Search by parcel ID
-      const { data: claims } = await supabase
+      let q = supabase
         .from('land_claims')
-        .select('id, parcel_id_barcode, ai_verification_status, created_at, claimant_id, region')
-        .or(`parcel_id_barcode.ilike.%${searchQuery}%,region.ilike.%${searchQuery}%`)
+        .select('id, parcel_id_barcode, ai_verification_status, created_at, claimant_id, region, address, blockchain_tx_hash')
+        .or(
+          `parcel_id_barcode.ilike.%${searchQuery}%,` +
+          `region.ilike.%${searchQuery}%,` +
+          `address.ilike.%${searchQuery}%,` +
+          `id.ilike.${searchQuery}%,` +
+          `blockchain_tx_hash.ilike.%${searchQuery}%`
+        )
         .limit(5)
+
+      // Scope to current user's claims in user variant
+      if (variant === 'user' && userId) {
+        q = q.eq('claimant_id', userId)
+      }
+
+      const { data: claims } = await q
 
       if (claims) {
         // Get claimant names
@@ -96,13 +125,16 @@ export function GlobalSearchBar() {
     return <Badge variant={variants[status] || 'secondary'}>{status.replace(/_/g, ' ')}</Badge>
   }
 
+  const claimHref = (id: string) =>
+    variant === 'user' ? `/claims/${id}` : `/admin/claims/${id}`
+
   return (
     <div ref={searchRef} className="relative w-full max-w-md">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
           type="text"
-          placeholder="Search by Parcel ID or Region..."
+          placeholder="Search by Parcel ID, Address, Claim ID…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => query.length >= 2 && setShowResults(true)}
@@ -119,7 +151,7 @@ export function GlobalSearchBar() {
             {results.map((result) => (
               <Link
                 key={result.id}
-                href={`/admin/claims/${result.id}`}
+                href={claimHref(result.id)}
                 onClick={() => {
                   setShowResults(false)
                   setQuery('')
@@ -129,10 +161,10 @@ export function GlobalSearchBar() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-navy-900 truncate">
-                      {result.parcel_id_barcode || 'No Parcel ID'}
+                      {result.parcel_id_barcode || result.id.slice(0, 8) + '…'}
                     </p>
                     <p className="text-sm text-gray-600 truncate">
-                      {result.claimant_name || 'Unknown Owner'} • {result.region || 'No Region'}
+                      {result.address || result.claimant_name || 'Unknown'} • {result.region || 'No Region'}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {new Date(result.created_at).toLocaleDateString()}

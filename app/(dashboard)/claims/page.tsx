@@ -16,6 +16,7 @@ import {
   ScrollText
 } from 'lucide-react'
 import Link from 'next/link'
+import { GlobalSearchBar } from '@/components/search/GlobalSearchBar'
 
 interface LandClaim {
   id: string
@@ -182,6 +183,11 @@ export default function ClaimsPage() {
           </Card>
         </div>
 
+        {/* Search */}
+        <div className="mb-4">
+          <GlobalSearchBar variant="user" />
+        </div>
+
         {/* Filters */}
         <Card className="mb-6">
           <CardHeader>
@@ -312,7 +318,7 @@ export default function ClaimsPage() {
                         </Button>
                       </Link>
                       {(claim.ai_verification_status === 'AI_VERIFIED' || claim.ai_verification_status === 'APPROVED') && (
-                        <Link href={`/dashboard/blockchain-ledger/mint?claimId=${claim.id}`}>
+                        <Link href={`/blockchain-ledger/mint?claimId=${claim.id}`}>
                           <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
                             Mint NFT
                           </Button>

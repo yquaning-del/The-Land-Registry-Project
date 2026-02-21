@@ -126,6 +126,7 @@ export default function ClaimDetailsPage() {
   const [verificationError, setVerificationError] = useState<string | null>(null)
   const [verificationResult, setVerificationResult] = useState<any>(null)
   const [stageIndex, setStageIndex] = useState(-1)
+  const [conflictAlert, setConflictAlert] = useState<string | null>(null)
 
   useEffect(() => {
     if (params.id) {
@@ -196,6 +197,7 @@ export default function ClaimDetailsPage() {
     setVerifying(true)
     setVerificationError(null)
     setVerificationResult(null)
+    setConflictAlert(null)
     setStageIndex(-1)
 
     try {
@@ -206,6 +208,11 @@ export default function ClaimDetailsPage() {
       })
 
       const data = await response.json()
+
+      if (response.status === 409 && data.error === 'POTENTIAL_CONFLICT') {
+        setConflictAlert(data.message)
+        return
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Verification failed')
@@ -392,6 +399,18 @@ export default function ClaimDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Conflict alert banner */}
+        {conflictAlert && (
+          <div className="mb-4 p-4 bg-orange-950 border border-orange-500 rounded-xl flex gap-3 items-start">
+            <AlertTriangle className="h-5 w-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-orange-300">Potential Conflict Detected</p>
+              <p className="text-sm text-orange-200 mt-1">{conflictAlert}</p>
+            </div>
+            <button onClick={() => setConflictAlert(null)} className="text-orange-400 hover:text-orange-200 text-lg leading-none">✕</button>
+          </div>
+        )}
 
         {/* Verification error banner */}
         {verificationError && (
@@ -591,7 +610,7 @@ export default function ClaimDetailsPage() {
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-gray-600 mb-1">Verification Status</div>
-              {getStatusBadge(claim.ai_verification_status)}
+              {getStatusBadge(verificationResult?.status ?? claim.ai_verification_status)}
             </CardContent>
           </Card>
           <Card>
@@ -603,7 +622,10 @@ export default function ClaimDetailsPage() {
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-gray-600 mb-1">AI Confidence</div>
-              {getConfidenceBadge(claim.ai_confidence_level, claim.ai_confidence_score) || (
+              {getConfidenceBadge(
+                verificationResult?.confidenceLevel ?? claim.ai_confidence_level,
+                verificationResult?.confidence ?? claim.ai_confidence_score
+              ) || (
                 <span className="text-gray-400">Not verified yet</span>
               )}
             </CardContent>

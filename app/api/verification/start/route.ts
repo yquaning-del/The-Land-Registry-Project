@@ -90,6 +90,28 @@ export async function POST(request: NextRequest) {
     // The button's loading state provides sufficient in-progress feedback to the user.
     // A future migration can add PROCESSING to claim_status if a persistent status is needed.
 
+    // Pre-flight: block if an approved/verified claim already exists within ~111 m (±0.001°)
+    if (claimData.latitude && claimData.longitude) {
+      const delta = 0.001
+      const { data: nearby } = await supabase
+        .from('land_claims')
+        .select('id')
+        .neq('id', claimId)
+        .in('ai_verification_status', ['APPROVED', 'AI_VERIFIED'])
+        .gte('latitude', claimData.latitude - delta)
+        .lte('latitude', claimData.latitude + delta)
+        .gte('longitude', claimData.longitude - delta)
+        .lte('longitude', claimData.longitude + delta)
+        .limit(1)
+
+      if (nearby && nearby.length > 0) {
+        return NextResponse.json({
+          error: 'POTENTIAL_CONFLICT',
+          message: 'A verified claim already exists for these coordinates. Please contact the Registry for dispute resolution.',
+        }, { status: 409 })
+      }
+    }
+
     let result: Awaited<ReturnType<EnhancedVerificationPipeline['execute']>>
     try {
       // Run enhanced AI verification pipeline, injecting the server Supabase client
