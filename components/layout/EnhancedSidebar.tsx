@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface NavItem {
@@ -74,7 +74,6 @@ const navItems: NavItem[] = [
         title: 'Pending',
         href: '/claims?status=pending',
         icon: Clock,
-        badge: 3,
         description: 'Claims awaiting verification',
       },
       {
@@ -200,6 +199,12 @@ const navItems: NavItem[] = [
         icon: TrendingUp,
         description: 'Platform statistics',
       },
+      {
+        title: 'Conflicts',
+        href: '/admin/conflicts',
+        icon: AlertTriangle,
+        description: 'Spatial conflicts & overlapping claims',
+      },
     ],
   },
 ]
@@ -213,6 +218,23 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+
+  // Fetch the current user's PENDING_VERIFICATION claim count for the badge
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return
+      supabase
+        .from('land_claims')
+        .select('*', { count: 'exact', head: true })
+        .eq('claimant_id', data.user.id)
+        .eq('ai_verification_status', 'PENDING_VERIFICATION')
+        .then(({ count }) => {
+          if (count != null && count > 0) setPendingCount(count)
+        })
+    })
+  }, [])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -344,11 +366,18 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
                         >
                           <ChildIcon className="h-4 w-4 flex-shrink-0" />
                           <span className="flex-1 truncate">{child.title}</span>
-                          {child.badge && (
+                          {/* Dynamic pending badge; static badge fallback for other items */}
+                          {child.href === '/claims?status=pending' ? (
+                            pendingCount > 0 && (
+                              <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-semibold text-white">
+                                {pendingCount}
+                              </span>
+                            )
+                          ) : child.badge ? (
                             <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-semibold text-white">
                               {child.badge}
                             </span>
-                          )}
+                          ) : null}
                         </Link>
                       )
                     })}

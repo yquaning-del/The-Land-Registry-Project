@@ -1,15 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  FileText, 
-  CheckCircle, 
-  Clock, 
-  AlertTriangle, 
+import {
+  FileText,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
   Eye,
   Upload,
   MapPin,
@@ -35,11 +36,29 @@ interface LandClaim {
   original_document_url: string
 }
 
-export default function ClaimsPage() {
+/** Map sidebar ?status= param values → internal filter enum */
+function statusParamToFilter(param: string | null): string {
+  switch (param) {
+    case 'pending':  return 'PENDING_VERIFICATION'
+    case 'verified': return 'VERIFIED'
+    case 'disputed': return 'REJECTED'
+    default:         return 'all'
+  }
+}
+
+function ClaimsPageContent() {
+  const searchParams = useSearchParams()
+  const statusParam = searchParams.get('status')
+
   const [claims, setClaims] = useState<LandClaim[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('all')
+  const [filter, setFilter] = useState<string>(() => statusParamToFilter(statusParam))
   const [typeFilter, setTypeFilter] = useState<string>('all')
+
+  // Sync filter when URL param changes (e.g. clicking sidebar links)
+  useEffect(() => {
+    setFilter(statusParamToFilter(statusParam))
+  }, [statusParam])
 
   useEffect(() => {
     loadClaims()
@@ -333,5 +352,17 @@ export default function ClaimsPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ClaimsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent" />
+      </div>
+    }>
+      <ClaimsPageContent />
+    </Suspense>
   )
 }
