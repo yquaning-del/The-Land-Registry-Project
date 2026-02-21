@@ -13,18 +13,22 @@ export default async function AdminLayout({
 
   if (!user) redirect('/sign-in')
 
-  const { data: profile, error: profileError } = await supabase
-    .from('user_profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  // Platform owner always has access — bypass DB role check
+  const isPlatformOwner = user.email === (process.env.PLATFORM_OWNER_EMAIL || '')
 
-  // Only redirect if we KNOW the user's role and it's not an admin role.
-  // If the profile query fails (e.g. RLS issue), allow through — the individual
-  // pages do their own client-side role checks.
-  if (profile && !profileError) {
-    if (!['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
-      redirect('/dashboard')
+  if (!isPlatformOwner) {
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    // Only redirect if we KNOW the user's role and it's not an admin role.
+    // If the profile query fails (e.g. RLS issue), allow through.
+    if (profile && !profileError) {
+      if (!['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
+        redirect('/dashboard')
+      }
     }
   }
 
