@@ -10,12 +10,12 @@ if (!clientId) {
 }
 
 let client: ReturnType<typeof createThirdwebClient> | null = null
-try {
-  client = createThirdwebClient({
-    clientId: clientId || 'demo-client-id',
-  })
-} catch (e) {
-  console.error('Failed to create Thirdweb client:', e)
+if (clientId) {
+  try {
+    client = createThirdwebClient({ clientId })
+  } catch (e) {
+    console.error('Failed to create Thirdweb client:', e)
+  }
 }
 
 export function ThirdwebProvider({ children }: { children: React.ReactNode }) {

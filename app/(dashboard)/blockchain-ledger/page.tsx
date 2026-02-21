@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,7 @@ interface MintedClaim {
 }
 
 export default function BlockchainLedgerPage() {
+  const { t } = useLanguage()
   const [mintedClaims, setMintedClaims] = useState<MintedClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [copiedHash, setCopiedHash] = useState<string | null>(null)
@@ -56,7 +58,7 @@ export default function BlockchainLedgerPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-emerald-50/20">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-navy-900 mb-2">Blockchain Ledger</h1>
+          <h1 className="text-3xl font-bold text-navy-900 mb-2">{t('blockchain.ledger')}</h1>
           <p className="text-gray-600">All minted land titles on the blockchain</p>
         </div>
 
@@ -65,7 +67,7 @@ export default function BlockchainLedgerPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-emerald-600" />
-                Minted Titles ({mintedClaims.length})
+                {t('blockchain.allRecords')} ({mintedClaims.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -110,7 +112,7 @@ export default function BlockchainLedgerPage() {
                         </div>
                         <Link href={`/admin/claims/${claim.id}`}>
                           <Button variant="outline" size="sm">
-                            View Details
+                            {t('common.view')}
                           </Button>
                         </Link>
                       </div>
@@ -119,7 +121,7 @@ export default function BlockchainLedgerPage() {
                         <div className="mt-3 p-3 bg-navy-900/5 rounded-lg">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs text-gray-600 mb-1">Transaction Hash</p>
+                              <p className="text-xs text-gray-600 mb-1">{t('blockchain.transactionHash')}</p>
                               <p className="text-sm font-mono text-navy-900 truncate">
                                 {claim.on_chain_hash}
                               </p>

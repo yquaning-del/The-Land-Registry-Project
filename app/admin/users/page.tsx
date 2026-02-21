@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +44,7 @@ const ROLE_OPTIONS = [
 ]
 
 export default function AdminUsersPage() {
+  const { t } = useLanguage()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -131,12 +133,12 @@ export default function AdminUsersPage() {
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-navy-900 mb-2">User Management</h1>
-            <p className="text-gray-600">Manage platform users and their roles</p>
+            <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('admin.userManagement')}</h1>
+            <p className="text-gray-600">{t('admin.manageUsersDesc')}</p>
           </div>
           <Button className="bg-emerald-600 hover:bg-emerald-700">
             <UserPlus className="h-4 w-4 mr-2" />
-            Invite User
+            {t('common.inviteUser')}
           </Button>
         </div>
 
@@ -144,7 +146,7 @@ export default function AdminUsersPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.totalUsers')}</CardTitle>
               <Users className="h-4 w-4 text-gray-600" />
             </CardHeader>
             <CardContent>
@@ -154,7 +156,7 @@ export default function AdminUsersPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Admins</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('nav.adminPanel')}</CardTitle>
               <Shield className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
@@ -174,7 +176,7 @@ export default function AdminUsersPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Regular Users</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('common.allUsers')}</CardTitle>
               <Users className="h-4 w-4 text-gray-600" />
             </CardHeader>
             <CardContent>
@@ -201,7 +203,7 @@ export default function AdminUsersPage() {
         {/* Users Table */}
         <Card>
           <CardHeader>
-            <CardTitle>All Users</CardTitle>
+            <CardTitle>{t('admin.allUsers')}</CardTitle>
             <CardDescription>
               {loading ? 'Loading users...' : `Showing ${filteredUsers.length} user(s)`}
             </CardDescription>
@@ -223,22 +225,22 @@ export default function AdminUsersPage() {
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        User
+                        {t('common.name')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Role
+                        {t('common.role')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Credits
+                        {t('common.credits')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Joined
+                        {t('common.joined')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Active
+                        {t('common.lastActive')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
+                        {t('common.actions')}
                       </th>
                     </tr>
                   </thead>
@@ -290,7 +292,7 @@ export default function AdminUsersPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Change Role</DropdownMenuLabel>
+                                <DropdownMenuLabel>{t('admin.changeRole')}</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 {ROLE_OPTIONS.map(({ value, label }) => (
                                   <DropdownMenuItem

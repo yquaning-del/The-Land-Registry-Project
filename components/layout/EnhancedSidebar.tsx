@@ -26,8 +26,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 
 interface NavItem {
   title: string
@@ -39,176 +40,6 @@ interface NavItem {
   description?: string
 }
 
-const navItems: NavItem[] = [
-  {
-    title: 'Overview',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    description: 'Dashboard home and statistics',
-  },
-  {
-    title: 'Setup',
-    href: '/setup',
-    icon: Settings,
-    description: 'Platform configuration and getting started',
-  },
-  {
-    title: 'Land Claims',
-    href: '/claims',
-    icon: FileText,
-    description: 'Manage your land claims',
-    children: [
-      {
-        title: 'All Claims',
-        href: '/claims',
-        icon: FileCheck,
-        description: 'View all your claims',
-      },
-      {
-        title: 'New Claim',
-        href: '/claims/new',
-        icon: Upload,
-        description: 'Submit a new claim',
-      },
-      {
-        title: 'Pending',
-        href: '/claims?status=pending',
-        icon: Clock,
-        description: 'Claims awaiting verification',
-      },
-      {
-        title: 'Verified',
-        href: '/claims?status=verified',
-        icon: CheckCircle,
-        description: 'Successfully verified claims',
-      },
-      {
-        title: 'Disputed',
-        href: '/claims?status=disputed',
-        icon: AlertTriangle,
-        description: 'Claims with issues',
-      },
-    ],
-  },
-  {
-    title: 'Verification Queue',
-    href: '/verification-queue',
-    icon: Shield,
-    description: 'AI verification status',
-  },
-  {
-    title: 'Blockchain Ledger',
-    href: '/blockchain-ledger',
-    icon: Database,
-    description: 'On-chain records',
-    children: [
-      {
-        title: 'All Records',
-        href: '/blockchain-ledger',
-        icon: Database,
-        description: 'View blockchain records',
-      },
-      {
-        title: 'Mint NFT',
-        href: '/blockchain-ledger/mint',
-        icon: Wallet,
-        description: 'Mint land title NFT',
-      },
-    ],
-  },
-  {
-    title: 'Billing & Credits',
-    href: '/settings/billing',
-    icon: CreditCard,
-    description: 'Manage subscription',
-    children: [
-      {
-        title: 'Overview',
-        href: '/settings/billing',
-        icon: TrendingUp,
-        description: 'Usage and balance',
-      },
-      {
-        title: 'Purchase Credits',
-        href: '/settings/billing/purchase',
-        icon: CreditCard,
-        description: 'Buy more credits',
-      },
-      {
-        title: 'Transaction History',
-        href: '/settings/billing/history',
-        icon: FileText,
-        description: 'View past transactions',
-      },
-    ],
-  },
-  {
-    title: 'Settings',
-    href: '/settings/profile',
-    icon: Settings,
-    description: 'Account preferences',
-    children: [
-      {
-        title: 'Profile',
-        href: '/settings/profile',
-        icon: UserIcon,
-        description: 'Personal information',
-      },
-      {
-        title: 'Security',
-        href: '/settings/security',
-        icon: Shield,
-        description: 'Password and 2FA',
-      },
-      {
-        title: 'Notifications',
-        href: '/settings/notifications',
-        icon: AlertTriangle,
-        description: 'Email preferences',
-      },
-    ],
-  },
-  {
-    title: 'Admin Panel',
-    href: '/admin',
-    icon: Users,
-    adminOnly: true,
-    description: 'Administrative tools',
-    children: [
-      {
-        title: 'Dashboard',
-        href: '/admin',
-        icon: LayoutDashboard,
-        description: 'Platform overview',
-      },
-      {
-        title: 'All Claims',
-        href: '/admin/claims',
-        icon: FileText,
-        description: 'Review all submissions',
-      },
-      {
-        title: 'User Management',
-        href: '/admin/users',
-        icon: Users,
-        description: 'Manage users',
-      },
-      {
-        title: 'Analytics',
-        href: '/admin/analytics',
-        icon: TrendingUp,
-        description: 'Platform statistics',
-      },
-      {
-        title: 'Conflicts',
-        href: '/admin/conflicts',
-        icon: AlertTriangle,
-        description: 'Spatial conflicts & overlapping claims',
-      },
-    ],
-  },
-]
-
 interface SidebarProps {
   isOpen?: boolean
   onClose?: () => void
@@ -217,9 +48,90 @@ interface SidebarProps {
 export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { t } = useLanguage()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+
+  const navItems = useMemo<NavItem[]>(() => [
+    {
+      title: t('nav.overview'),
+      href: '/dashboard',
+      icon: LayoutDashboard,
+      description: t('dashboard.commandCenter'),
+    },
+    {
+      title: t('nav.setup'),
+      href: '/setup',
+      icon: Settings,
+      description: t('setup.gettingStarted'),
+    },
+    {
+      title: t('nav.landClaims'),
+      href: '/claims',
+      icon: FileText,
+      description: t('claims.landClaims'),
+      children: [
+        { title: t('nav.allClaims'), href: '/claims', icon: FileCheck, description: t('claims.allClaims') },
+        { title: t('nav.newClaim'), href: '/claims/new', icon: Upload, description: t('claims.newClaim') },
+        { title: t('nav.pendingClaims'), href: '/claims?status=pending', icon: Clock, description: t('claims.pending') },
+        { title: t('nav.verifiedClaims'), href: '/claims?status=verified', icon: CheckCircle, description: t('claims.verified') },
+        { title: t('nav.disputedClaims'), href: '/claims?status=disputed', icon: AlertTriangle, description: t('claims.disputed') },
+      ],
+    },
+    {
+      title: t('nav.verificationQueue'),
+      href: '/verification-queue',
+      icon: Shield,
+      description: t('verification.verificationQueue'),
+    },
+    {
+      title: t('nav.blockchainLedger'),
+      href: '/blockchain-ledger',
+      icon: Database,
+      description: t('blockchain.ledger'),
+      children: [
+        { title: t('nav.allRecords'), href: '/blockchain-ledger', icon: Database, description: t('blockchain.allRecords') },
+        { title: t('nav.mintNFT'), href: '/blockchain-ledger/mint', icon: Wallet, description: t('blockchain.mintNFT') },
+      ],
+    },
+    {
+      title: t('nav.billingCredits'),
+      href: '/settings/billing',
+      icon: CreditCard,
+      description: t('billing.billingCredits'),
+      children: [
+        { title: t('nav.overview'), href: '/settings/billing', icon: TrendingUp, description: t('billing.currentPlan') },
+        { title: t('nav.purchaseCredits'), href: '/settings/billing/purchase', icon: CreditCard, description: t('billing.purchaseCredits') },
+        { title: t('nav.transactionHistory'), href: '/settings/billing/history', icon: FileText, description: t('billing.transactionHistory') },
+      ],
+    },
+    {
+      title: t('common.settings'),
+      href: '/settings/profile',
+      icon: Settings,
+      description: t('common.settings'),
+      children: [
+        { title: t('common.profile'), href: '/settings/profile', icon: UserIcon, description: t('common.profile') },
+        { title: t('common.security'), href: '/settings/security', icon: Shield, description: t('common.security') },
+        { title: t('common.notifications'), href: '/settings/notifications', icon: AlertTriangle, description: t('common.notifications') },
+      ],
+    },
+    {
+      title: t('nav.adminPanel'),
+      href: '/admin',
+      icon: Users,
+      adminOnly: true,
+      description: t('admin.adminDashboard'),
+      children: [
+        { title: t('nav.adminDashboard'), href: '/admin', icon: LayoutDashboard, description: t('admin.adminDashboard') },
+        { title: t('nav.allClaims'), href: '/admin/claims', icon: FileText, description: t('admin.claimsReview') },
+        { title: t('nav.userManagement'), href: '/admin/users', icon: Users, description: t('admin.userManagement') },
+        { title: t('nav.analytics'), href: '/admin/analytics', icon: TrendingUp, description: t('admin.analytics') },
+        { title: t('nav.conflicts'), href: '/admin/conflicts', icon: AlertTriangle, description: t('admin.conflicts') },
+      ],
+    },
+  ], [t])
 
   // Fetch user data: role (for admin nav visibility) + pending claim count (for badge)
   useEffect(() => {
@@ -410,13 +322,13 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
           <div className="rounded-lg bg-navy-800/50 p-3">
             <div className="flex items-center gap-2 mb-2">
               <HelpCircle className="h-4 w-4 text-emerald-500" />
-              <p className="text-xs font-medium text-gray-400">Need help?</p>
+              <p className="text-xs font-medium text-gray-400">{t('common.needHelp')}</p>
             </div>
             <Link
               href="/support"
               className="text-sm font-medium text-emerald-500 hover:text-emerald-400 transition-colors"
             >
-              Contact Support →
+              {t('common.contactSupport')} →
             </Link>
           </div>
 
@@ -427,14 +339,14 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-navy-800/50 hover:bg-navy-800 rounded-lg transition-colors"
             >
               <Home className="h-4 w-4" />
-              <span>Home</span>
+              <span>{t('common.home')}</span>
             </Link>
             <button
               onClick={handleLogout}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-gray-400 hover:text-white bg-navy-800/50 hover:bg-navy-800 rounded-lg transition-colors"
             >
               <LogOut className="h-4 w-4" />
-              <span>Logout</span>
+              <span>{t('common.logout')}</span>
             </button>
           </div>
         </div>

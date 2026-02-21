@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +39,7 @@ interface Stats {
 const PAGE_SIZE = 50
 
 export default function AdminClaimsPage() {
+  const { t } = useLanguage()
   const [claims, setClaims] = useState<LandClaim[]>([])
   const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, verified: 0, disputed: 0 })
   const [loading, setLoading] = useState(true)
@@ -133,7 +135,7 @@ export default function AdminClaimsPage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-navy-900 mb-2">Admin Claims Dashboard</h1>
+          <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('admin.claimsReview')}</h1>
           <p className="text-gray-600">Review and manage all land claims submitted to the platform</p>
         </div>
 
@@ -141,7 +143,7 @@ export default function AdminClaimsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Claims</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.totalClaims')}</CardTitle>
               <FileText className="h-4 w-4 text-gray-600" />
             </CardHeader>
             <CardContent>
@@ -231,7 +233,7 @@ export default function AdminClaimsPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parcel ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('claims.status')}</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -271,7 +273,7 @@ export default function AdminClaimsPage() {
                           <Link href={`/admin/claims/${claim.id}`}>
                             <Button size="sm" variant="outline">
                               <Eye className="h-4 w-4 mr-1" />
-                              Review
+                              {t('common.view')}
                             </Button>
                           </Link>
                         </td>

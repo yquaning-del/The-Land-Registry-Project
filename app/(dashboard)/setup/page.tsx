@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 export default function SetupPage() {
   const [credits, setCredits] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const { t } = useLanguage()
 
   useEffect(() => {
     const checkCredits = async () => {
@@ -49,12 +51,12 @@ export default function SetupPage() {
           <Link href="/dashboard">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
+              {t('common.back')}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-navy-900">Platform Setup</h1>
-            <p className="text-gray-600">Check your configuration and get started</p>
+            <h1 className="text-3xl font-bold text-navy-900">{t('setup.title')}</h1>
+            <p className="text-gray-600">{t('setup.gettingStarted')}</p>
           </div>
         </div>
 
@@ -94,13 +96,13 @@ export default function SetupPage() {
                 <div className="flex gap-2">
                   {credits === 0 && (
                     <Link href="/settings/billing">
-                      <Button size="sm">Purchase Credits</Button>
+                      <Button size="sm">{t('billing.purchaseCredits')}</Button>
                     </Link>
                   )}
                   {credits !== null && credits > 0 && (
                     <Link href="/claims/new">
                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                        Start Verification
+                        {t('setup.startVerification')}
                       </Button>
                     </Link>
                   )}
@@ -118,10 +120,10 @@ export default function SetupPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Info className="h-5 w-5" />
-              Getting Started
+              {t('setup.gettingStarted')}
             </CardTitle>
             <CardDescription>
-              Follow these steps to start using the platform
+              {t('setup.completeSteps')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -155,7 +157,7 @@ export default function SetupPage() {
                   3
                 </div>
                 <div>
-                  <div className="font-medium">Submit Your First Claim</div>
+                  <div className="font-medium">{t('setup.submitClaim')}</div>
                   <div className="text-sm text-gray-600">
                     Upload a land document and enter property details
                   </div>

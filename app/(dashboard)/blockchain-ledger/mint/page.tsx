@@ -43,6 +43,11 @@ function MintPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const claimId = searchParams.get('claimId')
+
+  // Pre-flight: check required NEXT_PUBLIC env vars before attempting anything
+  const missingConfig: string[] = []
+  if (!process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID) missingConfig.push('Thirdweb Client ID (NEXT_PUBLIC_THIRDWEB_CLIENT_ID)')
+  if (!process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS) missingConfig.push('NFT Contract Address (NEXT_PUBLIC_NFT_CONTRACT_ADDRESS)')
   
   const [claim, setClaim] = useState<LandClaim | null>(null)
   const [loading, setLoading] = useState(true)
@@ -105,6 +110,40 @@ function MintPage() {
   const handleMintError = (error: Error) => {
     console.error('Mint error:', error)
     setError(error.message)
+  }
+
+  if (missingConfig.length > 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="rounded-xl border border-red-300 bg-red-50 p-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-red-800 mb-1">Blockchain Configuration Required</h3>
+                <p className="text-sm text-red-700 mb-3">
+                  NFT minting cannot proceed because the following environment variables are missing:
+                </p>
+                <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+                  {missingConfig.map(cfg => <li key={cfg}>{cfg}</li>)}
+                </ul>
+                <p className="text-sm text-red-600 mt-3">
+                  Add these to your <code className="bg-red-100 px-1 rounded">.env.local</code> file and restart the server.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Link href="/blockchain-ledger">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Ledger
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {

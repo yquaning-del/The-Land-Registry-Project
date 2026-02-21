@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,7 @@ function statusParamToFilter(param: string | null): string {
 }
 
 function ClaimsPageContent() {
+  const { t } = useLanguage()
   const searchParams = useSearchParams()
   const statusParam = searchParams.get('status')
 
@@ -142,13 +144,13 @@ function ClaimsPageContent() {
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-navy-900 mb-2">My Land Claims</h1>
+            <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('claims.landClaims')}</h1>
             <p className="text-gray-600">Manage and track your land verification claims</p>
           </div>
           <Link href="/claims/new">
             <Button className="bg-emerald-600 hover:bg-emerald-700">
               <Upload className="h-4 w-4 mr-2" />
-              New Claim
+              {t('claims.newClaim')}
             </Button>
           </Link>
         </div>
@@ -220,28 +222,28 @@ function ClaimsPageContent() {
                 onClick={() => setFilter('all')}
                 size="sm"
               >
-                All Statuses
+                {t('common.all')}
               </Button>
               <Button
                 variant={filter === 'PENDING_VERIFICATION' ? 'default' : 'outline'}
                 onClick={() => setFilter('PENDING_VERIFICATION')}
                 size="sm"
               >
-                Pending
+                {t('claims.pending')}
               </Button>
               <Button
                 variant={filter === 'VERIFIED' ? 'default' : 'outline'}
                 onClick={() => setFilter('VERIFIED')}
                 size="sm"
               >
-                Verified
+                {t('claims.verified')}
               </Button>
               <Button
                 variant={filter === 'REJECTED' ? 'default' : 'outline'}
                 onClick={() => setFilter('REJECTED')}
                 size="sm"
               >
-                Rejected
+                {t('claims.disputed')}
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -282,12 +284,12 @@ function ClaimsPageContent() {
           <Card>
             <CardContent className="text-center py-12">
               <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No claims yet</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{t('claims.noClaimsFound')}</h3>
               <p className="text-gray-600 mb-4">Submit your first land title claim to get started</p>
               <Link href="/claims/new">
                 <Button className="bg-emerald-600 hover:bg-emerald-700">
                   <Upload className="h-4 w-4 mr-2" />
-                  Submit First Claim
+                  {t('claims.newClaim')}
                 </Button>
               </Link>
             </CardContent>
@@ -326,20 +328,20 @@ function ClaimsPageContent() {
                       </div>
                     )}
                     <div>
-                      <p className="text-sm text-gray-600">Submitted</p>
+                      <p className="text-sm text-gray-600">{t('claims.submittedAt')}</p>
                       <p className="text-sm">{new Date(claim.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="flex gap-2 pt-3">
                       <Link href={`/claims/${claim.id}`}>
                         <Button size="sm" variant="outline" className="flex-1">
                           <Eye className="h-4 w-4 mr-1" />
-                          View
+                          {t('claims.viewDetails')}
                         </Button>
                       </Link>
                       {(claim.ai_verification_status === 'AI_VERIFIED' || claim.ai_verification_status === 'APPROVED') && (
                         <Link href={`/blockchain-ledger/mint?claimId=${claim.id}`}>
                           <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
-                            Mint NFT
+                            {t('nav.mintNFT')}
                           </Button>
                         </Link>
                       )}

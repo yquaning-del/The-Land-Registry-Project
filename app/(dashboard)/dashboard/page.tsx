@@ -9,9 +9,10 @@ import { AnalyticsCharts } from '@/components/dashboard/AnalyticsCharts'
 import { VerificationProgress } from '@/components/dashboard/VerificationProgress'
 import { OnboardingGuide } from '@/components/OnboardingGuide'
 import { createClient } from '@/lib/supabase/client'
-import { Sparkles, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Sparkles, ArrowRight, AlertTriangle, Crown } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 
 export default function DashboardPage() {
   const [activities, setActivities] = useState<any[]>([])
@@ -20,6 +21,8 @@ export default function DashboardPage() {
   const [isNewUser, setIsNewUser] = useState(false)
   const [activeClaim, setActiveClaim] = useState<any>(null)
   const [hasConflicts, setHasConflicts] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const { t } = useLanguage()
 
   useEffect(() => {
     loadDashboardData()
@@ -31,15 +34,24 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {
-        // Get user profile for name
+        // Get user profile for name + role
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('full_name')
+          .select('full_name, role')
           .eq('id', user.id)
           .single()
-        
-        const profileData = profile as { full_name?: string } | null
+
+        const profileData = profile as { full_name?: string; role?: string } | null
         setUserName(profileData?.full_name || user.email?.split('@')[0] || 'User')
+
+        const adminRoles = ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
+        const ownerEmail = process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL
+        if (
+          (profileData?.role && adminRoles.includes(profileData.role)) ||
+          (ownerEmail && user.email === ownerEmail)
+        ) {
+          setIsAdmin(true)
+        }
 
         // Load claims
         const { data: claims } = await supabase
@@ -83,9 +95,9 @@ export default function DashboardPage() {
 
   const getGreeting = () => {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 17) return 'Good afternoon'
-    return 'Good evening'
+    if (hour < 12) return t('dashboard.goodMorning')
+    if (hour < 17) return t('dashboard.goodAfternoon')
+    return t('dashboard.goodEvening')
   }
 
   return (
@@ -97,10 +109,7 @@ export default function DashboardPage() {
             {getGreeting()}, {userName}! 👋
           </h1>
           <p className="text-gray-600">
-            {isNewUser 
-              ? "Welcome to Land Registry! Let's get started with your first verification."
-              : "Here's your real-time land registry command center."
-            }
+            {isNewUser ? t('dashboard.newUserWelcome') : t('dashboard.returningUserWelcome')}
           </p>
         </div>
 
@@ -113,15 +122,13 @@ export default function DashboardPage() {
                   <Sparkles className="h-8 w-8" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold mb-1">Get Started with Your First Verification</h2>
-                  <p className="text-white/90">
-                    You have <strong>5 free credits</strong> to verify land titles. Upload a document to begin!
-                  </p>
+                  <h2 className="text-xl font-bold mb-1">{t('dashboard.submitFirstClaim')}</h2>
+                  <p className="text-white/90">{t('dashboard.startVerifying')}</p>
                 </div>
               </div>
               <Link href="/claims/new">
                 <Button className="bg-white text-emerald-600 hover:bg-white/90 font-semibold">
-                  Submit First Claim
+                  {t('dashboard.submitFirstClaim')}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
@@ -150,6 +157,27 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Admin / Platform Owner shortcut */}
+        {isAdmin && !loading && (
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <Crown className="h-5 w-5 text-amber-400 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-700 dark:text-amber-300">{t('dashboard.platformOwner')}</p>
+                <p className="text-sm text-amber-600/80 dark:text-amber-200/80">
+                  {t('dashboard.platformOwnerDesc')}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin"
+              className="ml-4 flex-shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition-colors"
+            >
+              {t('dashboard.adminDashboard')} →
+            </Link>
+          </div>
+        )}
+
         {/* Onboarding Guide */}
         <OnboardingGuide />
 
@@ -159,7 +187,7 @@ export default function DashboardPage() {
         {/* Active Claim Verification Progress */}
         {activeClaim && !isNewUser && (
           <div className="mb-6">
-            <h2 className="text-lg font-semibold text-navy-900 mb-3">Active Verification</h2>
+            <h2 className="text-lg font-semibold text-navy-900 mb-3">{t('dashboard.activeVerification')}</h2>
             <VerificationProgress 
               claimId={activeClaim.id} 
               onStepClick={(step) => {
@@ -192,7 +220,7 @@ export default function DashboardPage() {
         {/* Analytics Charts Section */}
         {!isNewUser && (
           <div className="mt-8">
-            <h2 className="text-xl font-bold text-navy-900 mb-4">Analytics & Insights</h2>
+            <h2 className="text-xl font-bold text-navy-900 mb-4">{t('dashboard.analytics')}</h2>
             <AnalyticsCharts />
           </div>
         )}

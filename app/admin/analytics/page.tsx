@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   TrendingUp, 
@@ -29,6 +30,7 @@ interface AnalyticsData {
 }
 
 export default function AdminAnalyticsPage() {
+  const { t } = useLanguage()
   const [data, setData] = useState<AnalyticsData>({
     totalUsers: 0,
     totalClaims: 0,
@@ -136,7 +138,7 @@ export default function AdminAnalyticsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-navy-900 mb-2">Platform Analytics</h1>
+          <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('admin.analytics')}</h1>
           <p className="text-gray-600">Overview of platform performance and metrics</p>
         </div>
 
@@ -144,7 +146,7 @@ export default function AdminAnalyticsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.totalUsers')}</CardTitle>
               <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
@@ -155,7 +157,7 @@ export default function AdminAnalyticsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Claims</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.totalClaims')}</CardTitle>
               <FileText className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
@@ -166,7 +168,7 @@ export default function AdminAnalyticsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Verification Rate</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.verificationRate')}</CardTitle>
               <TrendingUp className="h-4 w-4 text-emerald-600" />
             </CardHeader>
             <CardContent>
@@ -177,7 +179,7 @@ export default function AdminAnalyticsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Credits Used</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('admin.creditsUsed')}</CardTitle>
               <CreditCard className="h-4 w-4 text-amber-600" />
             </CardHeader>
             <CardContent>

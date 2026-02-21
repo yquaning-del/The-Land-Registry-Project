@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
@@ -57,6 +58,7 @@ interface PendingReview {
 }
 
 export default function AdminDashboardPage() {
+  const { t } = useLanguage()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([])
@@ -269,7 +271,7 @@ export default function AdminDashboardPage() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-navy-900">
-              {isPlatformOwner ? 'Platform Owner Dashboard' : 'Admin Dashboard'}
+              {isPlatformOwner ? 'Platform Owner Dashboard' : t('admin.adminDashboard')}
             </h1>
             <p className="text-gray-600">
               {isPlatformOwner 
@@ -289,7 +291,7 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Users</p>
+                  <p className="text-sm text-gray-600">{t('admin.totalUsers')}</p>
                   <p className="text-3xl font-bold text-navy-900">{stats?.totalUsers || 0}</p>
                   {stats?.newUsersToday ? (
                     <p className="text-xs text-emerald-600 flex items-center mt-1">
@@ -309,7 +311,7 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Claims</p>
+                  <p className="text-sm text-gray-600">{t('admin.totalClaims')}</p>
                   <p className="text-3xl font-bold text-navy-900">{stats?.totalClaims || 0}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {stats?.pendingClaims || 0} pending review
@@ -326,7 +328,7 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Verification Rate</p>
+                  <p className="text-sm text-gray-600">{t('admin.verificationRate')}</p>
                   <p className="text-3xl font-bold text-navy-900">
                     {stats?.verificationRate.toFixed(1) || 0}%
                   </p>
@@ -345,7 +347,7 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Credits Used</p>
+                  <p className="text-sm text-gray-600">{t('admin.creditsUsed')}</p>
                   <p className="text-3xl font-bold text-navy-900">{stats?.totalCreditsUsed || 0}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {stats?.mintedClaims || 0} NFTs minted
@@ -424,11 +426,11 @@ export default function AdminDashboardPage() {
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                  Pending Human Review
+                  {t('admin.pendingReview')}
                 </CardTitle>
                 <Link href="/admin/claims">
                   <Button variant="ghost" size="sm">
-                    View All <ArrowRight className="h-4 w-4 ml-1" />
+                    {t('admin.viewAll')} <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>
                 </Link>
               </div>
@@ -475,7 +477,7 @@ export default function AdminDashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+              <CardTitle>{t('admin.quickActions')}</CardTitle>
               <CardDescription>Common admin tasks</CardDescription>
             </CardHeader>
             <CardContent>
@@ -518,7 +520,7 @@ export default function AdminDashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5" />
-              System Status
+              {t('admin.systemStatus')}
             </CardTitle>
           </CardHeader>
           <CardContent>

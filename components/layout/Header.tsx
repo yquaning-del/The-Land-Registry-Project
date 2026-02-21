@@ -7,7 +7,9 @@ import { ConnectWalletButton } from '@/components/ConnectWalletButton'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { LanguageToggle } from '@/components/i18n/LanguageToggle'
 import { SecurityAlertsBell } from '@/components/dashboard/SecurityAlertsBell'
+import { GlobalSearchBar } from '@/components/search/GlobalSearchBar'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import Link from 'next/link'
 
 interface HeaderProps {
@@ -17,6 +19,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const [credits, setCredits] = useState<number>(0)
   const [user, setUser] = useState<any>(null)
+  const { t } = useLanguage()
 
   useEffect(() => {
     let channel: any = null
@@ -95,15 +98,22 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Menu className="h-6 w-6" />
       </Button>
 
-      {/* Spacer */}
-      <div className="flex-1" />
+      {/* Search */}
+      {user && (
+        <div className="flex-1 max-w-sm hidden sm:block">
+          <GlobalSearchBar variant="user" />
+        </div>
+      )}
+
+      {/* Spacer (only when no search shown) */}
+      {!user && <div className="flex-1" />}
 
       {/* Quick Action - New Claim */}
       {user && (
         <Link href="/claims/new">
           <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white hidden sm:flex">
             <Plus className="h-4 w-4 mr-1" />
-            New Claim
+            {t('nav.newClaim')}
           </Button>
         </Link>
       )}
@@ -116,7 +126,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         >
           <Coins className="h-4 w-4 text-emerald-600" />
           <span className="text-sm font-semibold text-emerald-900">
-            {credits} {credits === 1 ? 'Credit' : 'Credits'}
+            {credits} {credits === 1 ? t('common.credit') : t('common.credits')}
           </span>
         </Link>
       )}

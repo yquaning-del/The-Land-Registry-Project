@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ interface PendingClaim {
 }
 
 export default function VerificationQueuePage() {
+  const { t } = useLanguage()
   const [pendingClaims, setPendingClaims] = useState<PendingClaim[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -63,7 +65,7 @@ export default function VerificationQueuePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-emerald-50/20">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-navy-900 mb-2">Verification Queue</h1>
+          <h1 className="text-3xl font-bold text-navy-900 mb-2">{t('verification.verificationQueue')}</h1>
           <p className="text-gray-600">Claims pending AI or human review</p>
         </div>
 
@@ -72,7 +74,7 @@ export default function VerificationQueuePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-emerald-600" />
-                Pending Verification ({pendingClaims.length})
+                {t('verification.pendingReview')} ({pendingClaims.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -85,7 +87,7 @@ export default function VerificationQueuePage() {
               ) : pendingClaims.length === 0 ? (
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-500">No claims pending verification</p>
+                  <p className="text-gray-500">{t('claims.noClaimsFound')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -130,7 +132,7 @@ export default function VerificationQueuePage() {
                             {/* Confidence bar */}
                             {confidencePct && (
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">Confidence:</span>
+                                <span className="text-xs text-gray-500">{t('verification.aiConfidence')}:</span>
                                 <div className="flex-1 max-w-32 bg-gray-200 rounded-full h-1.5">
                                   <div
                                     className={`${barColor} h-1.5 rounded-full`}
@@ -157,7 +159,7 @@ export default function VerificationQueuePage() {
                           <Link href={`/claims/${claim.id}`}>
                             <Button variant={isHumanReview ? 'default' : 'outline'} size="sm" className={isHumanReview ? 'bg-blue-600 hover:bg-blue-700' : ''}>
                               <Eye className="h-4 w-4 mr-1" />
-                              Review
+                              {t('common.view')}
                             </Button>
                           </Link>
                         </div>
