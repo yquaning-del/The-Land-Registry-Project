@@ -88,6 +88,8 @@ export default function ClaimDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
   const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [verificationResult, setVerificationResult] = useState<any>(null)
+  const [stageIndex, setStageIndex] = useState(-1)
 
   useEffect(() => {
     if (params.id) {
@@ -140,10 +142,25 @@ export default function ClaimDetailsPage() {
     }
   }
 
+  // Advance the stage progress animation while the pipeline runs
+  useEffect(() => {
+    if (!verifying) return
+    setStageIndex(0)
+    const timers = [
+      setTimeout(() => setStageIndex(1), 3000),
+      setTimeout(() => setStageIndex(2), 7000),
+      setTimeout(() => setStageIndex(3), 11000),
+      setTimeout(() => setStageIndex(4), 15000),
+    ]
+    return () => timers.forEach(clearTimeout)
+  }, [verifying])
+
   const startVerification = async () => {
     if (!claim) return
     setVerifying(true)
     setVerificationError(null)
+    setVerificationResult(null)
+    setStageIndex(-1)
 
     try {
       const response = await fetch('/api/verification/start', {
@@ -158,7 +175,9 @@ export default function ClaimDetailsPage() {
         throw new Error(data.error || 'Verification failed')
       }
 
-      // Reload claim details to reflect new status
+      // Show per-stage results from the API response before reloading
+      setVerificationResult(data.result)
+      setStageIndex(5) // all stages complete
       await loadClaimDetails()
     } catch (error: any) {
       console.error('Verification error:', error)
@@ -178,9 +197,10 @@ export default function ClaimDetailsPage() {
         return <Badge className="bg-yellow-500"><Clock className="h-3 w-3 mr-1" /> Pending</Badge>
       case 'PENDING_HUMAN_REVIEW':
         return <Badge className="bg-blue-500"><User className="h-3 w-3 mr-1" /> Human Review</Badge>
-      case 'DISPUTED':
       case 'REJECTED':
-        return <Badge className="bg-red-500"><XCircle className="h-3 w-3 mr-1" /> Disputed</Badge>
+        return <Badge className="bg-red-500"><XCircle className="h-3 w-3 mr-1" /> Rejected</Badge>
+      case 'DISPUTED':
+        return <Badge className="bg-orange-500"><AlertTriangle className="h-3 w-3 mr-1" /> Disputed</Badge>
       default:
         return <Badge className="bg-gray-500">{status}</Badge>
     }
@@ -280,7 +300,7 @@ export default function ClaimDetailsPage() {
               <p className="text-gray-600 font-mono text-sm">{claim.id}</p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {claim.ai_verification_status === 'PENDING_VERIFICATION' && (
+              {(claim.ai_verification_status === 'PENDING_VERIFICATION' || claim.ai_verification_status === 'REJECTED') && (
                 <div className="flex flex-col items-end gap-1">
                   <Button
                     onClick={startVerification}
@@ -338,6 +358,155 @@ export default function ClaimDetailsPage() {
               <p className="text-red-700 font-medium">Verification failed</p>
               <p className="text-red-600 text-sm mt-0.5">{verificationError}</p>
             </div>
+          </div>
+        )}
+
+        {/* Verification Progress Panel */}
+        {(verifying || verificationResult) && (
+          <div className="mb-6 bg-navy-900 border border-navy-700 rounded-xl overflow-hidden">
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-navy-700">
+              <div className="flex items-center gap-3">
+                {verifying ? (
+                  <RefreshCw className="h-5 w-5 text-emerald-400 animate-spin" />
+                ) : verificationResult?.recommendation === 'AUTO_APPROVE' ? (
+                  <CheckCircle className="h-5 w-5 text-emerald-400" />
+                ) : verificationResult?.recommendation === 'REJECT' ? (
+                  <XCircle className="h-5 w-5 text-red-400" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                )}
+                <span className="font-semibold text-white text-base">
+                  {verifying ? 'AI Verification Pipeline Running…' : 'Verification Complete'}
+                </span>
+                {verificationResult?.aiPowered && (
+                  <span className="text-xs bg-purple-900 text-purple-300 border border-purple-700 rounded px-2 py-0.5">
+                    GPT-4 Vision
+                  </span>
+                )}
+              </div>
+              {!verifying && verificationResult && (
+                <button
+                  onClick={() => setVerificationResult(null)}
+                  className="text-gray-400 hover:text-white text-xs underline"
+                >
+                  Dismiss
+                </button>
+              )}
+            </div>
+
+            {/* Stages */}
+            <div className="px-5 py-4 space-y-3">
+              {[
+                { label: 'Document Analysis', key: 'documentAnalysis', description: 'GPT-4 Vision reads and authenticates the land document' },
+                { label: 'Fraud Detection', key: 'fraudDetection', description: 'AI checks for identity and title fraud patterns' },
+                { label: 'Tampering Detection', key: 'tamperingCheck', description: 'Forensic analysis for digital editing artifacts' },
+                { label: 'GPS Validation', key: 'gpsValidation', description: 'Verifies coordinates within valid West Africa bounds' },
+                { label: 'Spatial Conflict Check', key: 'spatialCheck', description: 'Scans registry for overlapping land claims' },
+              ].map((stage, i) => {
+                const score: number | undefined = verificationResult?.breakdown?.[stage.key]
+                const isDone = stageIndex > i || (!verifying && verificationResult)
+                const isRunning = verifying && stageIndex === i
+                const isPending = !isDone && !isRunning
+
+                return (
+                  <div key={stage.key} className="flex items-center gap-4">
+                    {/* Icon */}
+                    <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full border">
+                      {isRunning ? (
+                        <RefreshCw className="h-3.5 w-3.5 text-emerald-400 animate-spin" />
+                      ) : isDone ? (
+                        score !== undefined && score < 0.5 ? (
+                          <XCircle className="h-4 w-4 text-red-400" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 text-emerald-400" />
+                        )
+                      ) : (
+                        <Clock className="h-3.5 w-3.5 text-gray-500" />
+                      )}
+                    </div>
+
+                    {/* Label + description */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${isPending ? 'text-gray-500' : 'text-white'}`}>
+                          {stage.label}
+                        </span>
+                        {isRunning && (
+                          <span className="text-xs text-emerald-400 animate-pulse">Analyzing…</span>
+                        )}
+                        {isDone && score !== undefined && (
+                          <span className={`text-xs font-mono ${score >= 0.7 ? 'text-emerald-400' : score >= 0.5 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {(score * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{stage.description}</p>
+                      {/* Score bar */}
+                      {isDone && score !== undefined && (
+                        <div className="mt-1 h-1 w-full bg-gray-700 rounded-full">
+                          <div
+                            className={`h-1 rounded-full transition-all duration-700 ${score >= 0.7 ? 'bg-emerald-500' : score >= 0.5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            style={{ width: `${Math.min(score * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Results footer */}
+            {verificationResult && !verifying && (
+              <div className="px-5 pb-5 space-y-4 border-t border-navy-700 pt-4">
+                {/* Overall result */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm text-gray-400">Overall Confidence:</span>
+                  <span className="text-white font-semibold">
+                    {(verificationResult.confidence * 100).toFixed(1)}%
+                  </span>
+                  <Badge className={
+                    verificationResult.recommendation === 'AUTO_APPROVE' ? 'bg-emerald-600' :
+                    verificationResult.recommendation === 'REJECT' ? 'bg-red-600' : 'bg-yellow-500'
+                  }>
+                    {verificationResult.recommendation === 'AUTO_APPROVE' ? '✓ Auto-Approved' :
+                     verificationResult.recommendation === 'REJECT' ? '✗ Rejected' :
+                     '⟳ Sent for Human Review'}
+                  </Badge>
+                </div>
+
+                {/* AI Reasoning */}
+                {Array.isArray(verificationResult.reasoning) && verificationResult.reasoning.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">AI Reasoning</p>
+                    <ul className="space-y-1">
+                      {verificationResult.reasoning.map((line: string, idx: number) => (
+                        <li key={idx} className="text-sm text-gray-300">{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Fraud alerts */}
+                {verificationResult.fraudDetection?.isFraudulent && (
+                  <div className="bg-red-950 border border-red-700 rounded-lg p-3">
+                    <p className="text-red-400 text-sm font-medium mb-1">🚨 Fraud Indicators Detected</p>
+                    <ul className="text-xs text-red-300 space-y-0.5">
+                      {verificationResult.fraudDetection.indicators?.map((ind: string, i: number) => (
+                        <li key={i}>• {ind}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {verifying && (
+              <div className="px-5 pb-4 text-xs text-gray-500">
+                Pipeline takes 25–60 seconds with GPT-4 Vision · Please keep this page open
+              </div>
+            )}
           </div>
         )}
 

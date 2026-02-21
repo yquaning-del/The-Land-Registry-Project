@@ -181,13 +181,8 @@ export async function POST(request: NextRequest) {
         cross_reference_score: result.breakdown.spatialCheck,
         fraud_detection_score: result.breakdown.fraudDetection,
         tampering_check_score: result.breakdown.tamperingCheck,
-        ai_powered: result.aiPowered ?? false,
         reasoning: Array.isArray(result.reasoning) ? result.reasoning : [result.reasoning].filter(Boolean),
         fraud_indicators: result.fraudDetection?.fraudIndicators || [],
-        verification_metadata: {
-          breakdown: result.breakdown,
-          executionTimeMs: result.executionTimeMs,
-        },
       } as any)
 
     if (insertError) {
