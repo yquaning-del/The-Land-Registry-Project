@@ -178,7 +178,14 @@ export default function ClaimDetailsPage() {
       // Show per-stage results from the API response before reloading
       setVerificationResult(data.result)
       setStageIndex(5) // all stages complete
-      await loadClaimDetails()
+      // Optimistically update status cards from the API response — robust to loadClaimDetails() timing
+      setClaim(prev => prev ? {
+        ...prev,
+        ai_verification_status: data.result.status,
+        ai_confidence_score: data.result.confidence,
+        ai_confidence_level: data.result.confidenceLevel,
+      } : prev)
+      await loadClaimDetails() // then sync any other server-updated fields (title_type, etc.)
     } catch (error: any) {
       console.error('Verification error:', error)
       setVerificationError(error.message || 'Verification failed. Please try again.')
