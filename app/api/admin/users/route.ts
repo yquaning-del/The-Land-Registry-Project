@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    const VALID_ROLES = ['USER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
+    const VALID_ROLES = ['CLAIMANT', 'VERIFIER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
     if (role && !VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Invalid role value' }, { status: 400 })
     }

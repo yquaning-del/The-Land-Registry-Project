@@ -5,15 +5,23 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Users, 
-  UserPlus, 
-  Shield, 
-  Mail,
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Users,
+  UserPlus,
+  Shield,
   Calendar,
   CreditCard,
   MoreVertical,
-  Search
+  Search,
+  Loader2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
@@ -27,10 +35,18 @@ interface User {
   last_sign_in_at: string
 }
 
+const ROLE_OPTIONS = [
+  { value: 'CLAIMANT',    label: 'Claimant' },
+  { value: 'VERIFIER',    label: 'Verifier' },
+  { value: 'ADMIN',       label: 'Admin' },
+  { value: 'SUPER_ADMIN', label: 'Super Admin' },
+]
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
   const [stats, setStats] = useState({
     total: 0,
     admins: 0,
@@ -41,6 +57,13 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers()
   }, [])
+
+  const computeStats = (userData: User[]) => ({
+    total: userData.length,
+    admins: userData.filter(u => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || u.role === 'PLATFORM_OWNER').length,
+    verifiers: userData.filter(u => u.role === 'VERIFIER').length,
+    users: userData.filter(u => u.role === 'CLAIMANT').length,
+  })
 
   const loadUsers = async () => {
     setLoading(true)
@@ -55,16 +78,9 @@ export default function AdminUsersPage() {
 
       if (error) throw error
 
-      const userData: any[] = data || []
+      const userData: User[] = data || []
       setUsers(userData)
-
-      // Calculate stats
-      setStats({
-        total: userData.length,
-        admins: userData.filter((u: any) => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN').length,
-        verifiers: userData.filter((u: any) => u.role === 'VERIFIER').length,
-        users: userData.filter((u: any) => u.role === 'CLAIMANT').length,
-      })
+      setStats(computeStats(userData))
     } catch (error) {
       console.error('Error loading users:', error)
     } finally {
@@ -72,19 +88,40 @@ export default function AdminUsersPage() {
     }
   }
 
-  const filteredUsers = users.filter(user => 
+  const changeRole = async (userId: string, newRole: string) => {
+    setUpdatingUserId(userId)
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role: newRole }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        console.error('Role update failed:', data.error)
+        return
+      }
+      const updated = users.map(u => u.id === userId ? { ...u, role: newRole } : u)
+      setUsers(updated)
+      setStats(computeStats(updated))
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
+  const filteredUsers = users.filter(user =>
     user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const getRoleBadge = (role: string) => {
     switch (role) {
-      case 'ADMIN':
-        return <Badge className="bg-purple-500">Admin</Badge>
-      case 'VERIFIER':
-        return <Badge className="bg-blue-500">Verifier</Badge>
-      default:
-        return <Badge className="bg-gray-500">User</Badge>
+      case 'PLATFORM_OWNER': return <Badge className="bg-amber-500">Owner</Badge>
+      case 'SUPER_ADMIN':    return <Badge className="bg-red-500">Super Admin</Badge>
+      case 'ADMIN':          return <Badge className="bg-purple-500">Admin</Badge>
+      case 'VERIFIER':       return <Badge className="bg-blue-500">Verifier</Badge>
+      case 'CLAIMANT':       return <Badge className="bg-gray-500">Claimant</Badge>
+      default:               return <Badge className="bg-gray-400">{role}</Badge>
     }
   }
 
@@ -217,7 +254,7 @@ export default function AdminUsersPage() {
                             </div>
                             <div className="ml-3">
                               <p className="font-medium text-navy-900">{user.full_name || 'No name'}</p>
-                              <p className="text-sm text-gray-500">{user.email}</p>
+                              <p className="text-sm text-gray-500">{user.email || '—'}</p>
                             </div>
                           </div>
                         </td>
@@ -237,15 +274,37 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {user.last_sign_in_at 
-                            ? new Date(user.last_sign_in_at).toLocaleDateString() 
+                          {user.last_sign_in_at
+                            ? new Date(user.last_sign_in_at).toLocaleDateString()
                             : 'Never'
                           }
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm">
-                          <Button size="sm" variant="ghost">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
+                          {updatingUserId === user.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Change Role</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {ROLE_OPTIONS.map(({ value, label }) => (
+                                  <DropdownMenuItem
+                                    key={value}
+                                    disabled={user.role === value}
+                                    onClick={() => changeRole(user.id, value)}
+                                    className={user.role === value ? 'font-semibold text-emerald-600' : ''}
+                                  >
+                                    {label}{user.role === value ? ' ✓' : ''}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </td>
                       </tr>
                     ))}
