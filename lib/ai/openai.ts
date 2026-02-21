@@ -190,6 +190,27 @@ export async function detectFraudWithGPT4(
     previousClaims?: number
   }
 ): Promise<FraudDetectionResult> {
+  // When document analysis is a neutral fallback (image URL inaccessible),
+  // the result has documentType='Unknown' with all null fields. Passing this
+  // to GPT-4 causes it to score the document as highly suspicious (0.8–0.9
+  // fraud confidence) because there's nothing to confirm authenticity.
+  // Return a neutral "insufficient data" result instead.
+  if (
+    documentAnalysis.documentType === 'Unknown' &&
+    !documentAnalysis.grantorName &&
+    !documentAnalysis.parcelId &&
+    !documentAnalysis.plotNumber
+  ) {
+    return {
+      isFraudulent: false,
+      confidenceScore: 0.3,
+      fraudIndicators: [],
+      authenticityMarkers: ['Insufficient document data — image could not be retrieved for analysis'],
+      reasoning: 'Document image was inaccessible for analysis. Fraud assessment requires a readable document — routing to human review.',
+      recommendation: 'REVIEW'
+    }
+  }
+
   if (!OPENAI_API_KEY) {
     return getFallbackFraudDetection(documentAnalysis)
   }
