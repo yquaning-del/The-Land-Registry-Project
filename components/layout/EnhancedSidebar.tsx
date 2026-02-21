@@ -219,12 +219,27 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
   const router = useRouter()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [pendingCount, setPendingCount] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  // Fetch the current user's PENDING_VERIFICATION claim count for the badge
+  // Fetch user data: role (for admin nav visibility) + pending claim count (for badge)
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return
+
+      // Check admin role
+      supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+        .then(({ data: profile }) => {
+          if (profile && ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
+            setIsAdmin(true)
+          }
+        })
+
+      // Pending claim count badge
       supabase
         .from('land_claims')
         .select('*', { count: 'exact', head: true })
@@ -288,6 +303,7 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
         {/* Navigation - Scrollable */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems.map((item) => {
+            if (item.adminOnly && !isAdmin) return null
             const Icon = item.icon
             const hasChildren = item.children && item.children.length > 0
             const expanded = isExpanded(item.href)

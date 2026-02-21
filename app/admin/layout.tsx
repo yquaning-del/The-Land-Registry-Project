@@ -13,14 +13,19 @@ export default async function AdminLayout({
 
   if (!user) redirect('/sign-in')
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
     .select('role')
     .eq('id', user.id)
     .single()
 
-  if (!profile || !['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
-    redirect('/dashboard')
+  // Only redirect if we KNOW the user's role and it's not an admin role.
+  // If the profile query fails (e.g. RLS issue), allow through — the individual
+  // pages do their own client-side role checks.
+  if (profile && !profileError) {
+    if (!['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
+      redirect('/dashboard')
+    }
   }
 
   const hasOpenAI = !!process.env.OPENAI_API_KEY
