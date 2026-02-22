@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { SpatialRegistry } from '@/services/spatialRegistry'
 
-const spatialRegistry = new SpatialRegistry()
-
 /**
  * POST /api/spatial/collision
  * Check for coordinate collision against existing claims
@@ -12,6 +10,7 @@ const spatialRegistry = new SpatialRegistry()
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const spatialRegistry = new SpatialRegistry()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {

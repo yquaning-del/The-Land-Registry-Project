@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { SpatialConflictService } from '@/services/spatialService'
 
-const spatialService = new SpatialConflictService()
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const spatialService = new SpatialConflictService()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {

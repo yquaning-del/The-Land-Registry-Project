@@ -3,11 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { SpatialConflictService } from '@/services/spatialService'
 import { Polygon, SpatialCheckRequest } from '@/types/spatial.types'
 
-const spatialService = new SpatialConflictService()
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const spatialService = new SpatialConflictService()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
