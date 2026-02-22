@@ -7,7 +7,7 @@
 import * as turf from '@turf/turf'
 import { Feature, Polygon as GeoJSONPolygon, Position } from 'geojson'
 import { createClient } from '@/lib/supabase/client'
-import { notificationService, ConflictData } from './notificationService'
+import { NotificationService, ConflictData } from './notificationService'
 
 // Types
 export interface Coordinate {
@@ -409,7 +409,7 @@ export class SpatialRegistry {
       }
 
       // Send notifications
-      await notificationService.sendConflictAlert(conflictData)
+      await new NotificationService().sendConflictAlert(conflictData)
 
       console.log(`✅ Conflict notifications sent for claim ${claimId}`)
     } catch (error) {
@@ -650,5 +650,3 @@ export class SpatialRegistry {
   }
 }
 
-// Export singleton instance
-export const spatialRegistry = new SpatialRegistry()

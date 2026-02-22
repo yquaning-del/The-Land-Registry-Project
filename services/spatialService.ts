@@ -1160,4 +1160,3 @@ export class SpatialConflictService {
   }
 }
 
-export const spatialService = new SpatialConflictService()

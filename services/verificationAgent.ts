@@ -596,4 +596,3 @@ export class DeepMatchVerificationAgent {
   }
 }
 
-export const verificationAgent = new DeepMatchVerificationAgent()
