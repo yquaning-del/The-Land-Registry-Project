@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-// GET - List all users (admin only)
+const PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL || ''
+
+/** Returns true if the given user is authorised to perform admin actions. */
+async function isAuthorisedAdmin(userEmail: string | undefined, userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
+  // Platform owner bypass — no DB query needed
+  if (PLATFORM_OWNER_EMAIL && userEmail === PLATFORM_OWNER_EMAIL) return true
+
+  // Fallback: check DB role
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', userId)
+    .single()
+
+  return !!(profile && ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(profile.role))
+}
+
+// GET - List all users with email and last sign-in (admin only)
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -11,59 +29,51 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user is admin
-    const { data: userData } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!userData || !['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(userData.role)) {
+    if (!await isAuthorisedAdmin(user.email, user.id, supabase)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
-    const search = searchParams.get('search') || ''
-    const role = searchParams.get('role')
+    // Use admin client to bypass RLS for both queries
+    const adminSupabase = createAdminClient()
 
-    let query = supabase
+    // Fetch all profiles (RLS bypassed)
+    const { data: profiles, error: profilesError } = await adminSupabase
       .from('user_profiles')
-      .select('id, full_name, role, created_at', { count: 'exact' })
+      .select('id, full_name, role, created_at')
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
 
-    if (search) {
-      // Escape LIKE wildcards to prevent unexpected pattern matches
-      const escapedSearch = search.replace(/[%_\\]/g, '\\$&')
-      query = query.or(`full_name.ilike.%${escapedSearch}%`)
-    }
+    if (profilesError) throw profilesError
 
-    if (role) {
-      query = query.eq('role', role)
-    }
+    // Fetch auth users for email + last_sign_in_at
+    const { data: { users: authUsers }, error: authListError } =
+      await adminSupabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
 
-    const { data: users, error, count } = await query
+    if (authListError) throw authListError
 
-    if (error) throw error
+    // Merge on user id
+    const authMap = new Map(authUsers.map(u => [u.id, u]))
 
-    return NextResponse.json({
-      users: users || [],
-      total: count || 0,
-      limit,
-      offset,
+    const users = (profiles ?? []).map(profile => {
+      const authUser = authMap.get(profile.id)
+      return {
+        id: profile.id,
+        email: authUser?.email ?? '',
+        full_name: profile.full_name,
+        role: profile.role,
+        created_at: profile.created_at,
+        last_sign_in_at: authUser?.last_sign_in_at ?? null,
+      }
     })
-  } catch (error: any) {
+
+    return NextResponse.json({ users, total: users.length })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch users'
     console.error('Error fetching users:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch users' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
-// PATCH - Update user role or credits (admin only)
+// PATCH - Update user role (admin only)
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -73,54 +83,36 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user is admin
-    const { data: adminData } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!adminData || !['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(adminData.role)) {
+    if (!await isAuthorisedAdmin(user.email, user.id, supabase)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { userId, role, credits } = await request.json()
+    const { userId, role } = await request.json()
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
     const VALID_ROLES = ['CLAIMANT', 'VERIFIER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
-    if (role && !VALID_ROLES.includes(role)) {
-      return NextResponse.json({ error: 'Invalid role value' }, { status: 400 })
-    }
-    if (credits !== undefined && (!Number.isInteger(credits) || credits < 0)) {
-      return NextResponse.json({ error: 'Credits must be a non-negative integer' }, { status: 400 })
+    if (!role || !VALID_ROLES.includes(role)) {
+      return NextResponse.json({ error: 'Invalid or missing role value' }, { status: 400 })
     }
 
-    const updates: Record<string, unknown> = {}
-    if (role) updates.role = role
-    if (credits !== undefined) updates.credits = credits
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'No updates provided' }, { status: 400 })
-    }
-
-    const { data: updatedUser, error: updateError } = await supabase
+    // Use admin client so the update bypasses RLS regardless of caller's DB role
+    const adminSupabase = createAdminClient()
+    const { data: updatedUser, error: updateError } = await adminSupabase
       .from('user_profiles')
-      .update(updates)
+      .update({ role })
       .eq('id', userId)
-      .select()
+      .select('id, full_name, role, created_at')
       .single()
 
     if (updateError) throw updateError
 
     return NextResponse.json({ user: updatedUser })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update user'
     console.error('Error updating user:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to update user' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

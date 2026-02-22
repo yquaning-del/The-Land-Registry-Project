@@ -146,7 +146,7 @@ export function EnhancedSidebar({ isOpen = true, onClose }: SidebarProps) {
         .eq('id', data.user.id)
         .single()
         .then(({ data: profile }) => {
-          if (profile && ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
+          if (profile && ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(profile.role)) {
             setIsAdmin(true)
           }
         })

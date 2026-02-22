@@ -1,20 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { 
-  TrendingUp, 
-  Users, 
-  FileText, 
+import {
+  TrendingUp,
+  Users,
+  FileText,
   CheckCircle,
   Clock,
   AlertTriangle,
   CreditCard,
-  Activity,
   BarChart3,
-  PieChart
+  PieChart,
 } from 'lucide-react'
 
 interface AnalyticsData {
@@ -24,7 +22,6 @@ interface AnalyticsData {
   pendingClaims: number
   disputedClaims: number
   totalCreditsUsed: number
-  totalRevenue: number
   claimsByMonth: { month: string; count: number }[]
   verificationRate: number
 }
@@ -38,11 +35,11 @@ export default function AdminAnalyticsPage() {
     pendingClaims: 0,
     disputedClaims: 0,
     totalCreditsUsed: 0,
-    totalRevenue: 0,
     claimsByMonth: [],
     verificationRate: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadAnalytics()
@@ -50,71 +47,29 @@ export default function AdminAnalyticsPage() {
 
   const loadAnalytics = async () => {
     setLoading(true)
-    const supabase = createClient()
-
+    setError(null)
     try {
-      // Get user count
-      const { count: userCount } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-
-      // Get claims data
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: claims } = await (supabase as any)
-        .from('land_claims')
-        .select('ai_verification_status, created_at')
-
-      const claimsData: any[] = claims || []
-      const verified = claimsData.filter((c: any) => c.ai_verification_status === 'AI_VERIFIED' || c.ai_verification_status === 'APPROVED').length
-      const pending = claimsData.filter((c: any) => c.ai_verification_status === 'PENDING_VERIFICATION').length
-      const disputed = claimsData.filter((c: any) => c.ai_verification_status === 'DISPUTED' || c.ai_verification_status === 'REJECTED').length
-
-      // Get credit transactions
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: transactions } = await (supabase as any)
-        .from('credit_transactions')
-        .select('amount, type')
-
-      const transactionsData: any[] = transactions || []
-      const creditsUsed = transactionsData
-        .filter((t: any) => t.type === 'VERIFICATION' || t.type === 'MINT')
-        .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0)
-
-      // Calculate claims by month (last 6 months)
-      const monthlyData: { [key: string]: number } = {}
-      const now = new Date()
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const key = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-        monthlyData[key] = 0
+      const res = await fetch('/api/admin/analytics')
+      if (!res.ok) {
+        const err = await res.json()
+        setError(err.error || 'Failed to load analytics')
+        return
       }
-
-      claimsData.forEach(claim => {
-        const date = new Date(claim.created_at)
-        const key = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-        if (monthlyData[key] !== undefined) {
-          monthlyData[key]++
-        }
-      })
-
-      const claimsByMonth = Object.entries(monthlyData).map(([month, count]) => ({
-        month,
-        count,
-      }))
-
+      const json = await res.json()
+      // API returns nested shape: { users, claims, credits }
       setData({
-        totalUsers: userCount || 0,
-        totalClaims: claimsData.length,
-        verifiedClaims: verified,
-        pendingClaims: pending,
-        disputedClaims: disputed,
-        totalCreditsUsed: creditsUsed,
-        totalRevenue: creditsUsed * 2, // Rough estimate
-        claimsByMonth,
-        verificationRate: claimsData.length > 0 ? (verified / claimsData.length) * 100 : 0,
+        totalUsers: json.users?.total ?? 0,
+        totalClaims: json.claims?.total ?? 0,
+        verifiedClaims: json.claims?.verified ?? 0,
+        pendingClaims: json.claims?.pending ?? 0,
+        disputedClaims: json.claims?.disputed ?? 0,
+        totalCreditsUsed: json.credits?.used ?? 0,
+        claimsByMonth: json.claims?.byMonth ?? [],
+        verificationRate: json.claims?.verificationRate ?? 0,
       })
-    } catch (error) {
-      console.error('Error loading analytics:', error)
+    } catch (err) {
+      console.error('Error loading analytics:', err)
+      setError('Network error — could not load analytics')
     } finally {
       setLoading(false)
     }
@@ -125,8 +80,21 @@ export default function AdminAnalyticsPage() {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent" />
             <p className="mt-4 text-gray-600">Loading analytics...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-12 text-red-600">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+            <p className="font-medium">{error}</p>
           </div>
         </div>
       </div>
@@ -189,7 +157,7 @@ export default function AdminAnalyticsPage() {
           </Card>
         </div>
 
-        {/* Claims Status */}
+        {/* Claims Status + Monthly Chart */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
             <CardHeader>
@@ -201,62 +169,32 @@ export default function AdminAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full bg-emerald-500" />
-                    <span className="text-sm text-gray-600">Verified</span>
+                {[
+                  { label: 'Verified', count: data.verifiedClaims, color: 'bg-emerald-500' },
+                  { label: 'Pending',  count: data.pendingClaims,  color: 'bg-yellow-500' },
+                  { label: 'Disputed', count: data.disputedClaims, color: 'bg-red-500' },
+                ].map(({ label, count, color }) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full ${color}`} />
+                        <span className="text-sm text-gray-600">{label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{count}</span>
+                        <span className="text-xs text-gray-500">
+                          ({data.totalClaims > 0 ? ((count / data.totalClaims) * 100).toFixed(0) : 0}%)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`${color} h-2 rounded-full`}
+                        style={{ width: `${data.totalClaims > 0 ? (count / data.totalClaims) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{data.verifiedClaims}</span>
-                    <span className="text-xs text-gray-500">
-                      ({data.totalClaims > 0 ? ((data.verifiedClaims / data.totalClaims) * 100).toFixed(0) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-emerald-500 h-2 rounded-full" 
-                    style={{ width: `${data.totalClaims > 0 ? (data.verifiedClaims / data.totalClaims) * 100 : 0}%` }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full bg-yellow-500" />
-                    <span className="text-sm text-gray-600">Pending</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{data.pendingClaims}</span>
-                    <span className="text-xs text-gray-500">
-                      ({data.totalClaims > 0 ? ((data.pendingClaims / data.totalClaims) * 100).toFixed(0) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-yellow-500 h-2 rounded-full" 
-                    style={{ width: `${data.totalClaims > 0 ? (data.pendingClaims / data.totalClaims) * 100 : 0}%` }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full bg-red-500" />
-                    <span className="text-sm text-gray-600">Disputed</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{data.disputedClaims}</span>
-                    <span className="text-xs text-gray-500">
-                      ({data.totalClaims > 0 ? ((data.disputedClaims / data.totalClaims) * 100).toFixed(0) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-red-500 h-2 rounded-full" 
-                    style={{ width: `${data.totalClaims > 0 ? (data.disputedClaims / data.totalClaims) * 100 : 0}%` }}
-                  />
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -274,11 +212,10 @@ export default function AdminAnalyticsPage() {
                 {data.claimsByMonth.map((item, index) => {
                   const maxCount = Math.max(...data.claimsByMonth.map(i => i.count), 1)
                   const height = (item.count / maxCount) * 100
-                  
                   return (
                     <div key={index} className="flex-1 flex flex-col items-center gap-2">
                       <div className="w-full bg-gray-100 rounded-t relative" style={{ height: '160px' }}>
-                        <div 
+                        <div
                           className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t transition-all duration-500"
                           style={{ height: `${height}%` }}
                         />

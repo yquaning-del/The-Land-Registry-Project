@@ -1,27 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function GET(request: NextRequest) {
+const PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL || ''
+
+async function isAuthorisedAdmin(userEmail: string | undefined, userId: string, supabase: Awaited<ReturnType<typeof createClient>>) {
+  if (PLATFORM_OWNER_EMAIL && userEmail === PLATFORM_OWNER_EMAIL) return true
+  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', userId).single()
+  return !!(profile && ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(profile.role))
+}
+
+export async function GET() {
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is admin
-    const { data: userData } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!userData || !['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(userData.role)) {
+    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!await isAuthorisedAdmin(user.email, user.id, supabase)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Run all count queries in parallel — no full table scans
+    // Use admin client so RLS is bypassed for all queries
+    const admin = createAdminClient()
+
     const now = new Date()
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString()
 
@@ -39,70 +39,56 @@ export async function GET(request: NextRequest) {
       { count: professionalSubs },
       { count: enterpriseSubs },
     ] = await Promise.all([
-      supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('land_claims').select('*', { count: 'exact', head: true }),
-      supabase.from('land_claims').select('*', { count: 'exact', head: true })
+      admin.from('user_profiles').select('*', { count: 'exact', head: true }),
+      admin.from('land_claims').select('*', { count: 'exact', head: true }),
+      admin.from('land_claims').select('*', { count: 'exact', head: true })
         .in('ai_verification_status', ['AI_VERIFIED', 'APPROVED']),
-      supabase.from('land_claims').select('*', { count: 'exact', head: true })
+      admin.from('land_claims').select('*', { count: 'exact', head: true })
         .in('ai_verification_status', ['PENDING_VERIFICATION', 'PENDING_HUMAN_REVIEW']),
-      supabase.from('land_claims').select('*', { count: 'exact', head: true })
+      admin.from('land_claims').select('*', { count: 'exact', head: true })
         .in('ai_verification_status', ['DISPUTED', 'REJECTED']),
-      supabase.from('land_claims').select('*', { count: 'exact', head: true })
+      admin.from('land_claims').select('*', { count: 'exact', head: true })
         .eq('mint_status', 'MINTED'),
-      // Only fetch created_at for the last 6 months for the month chart
-      supabase.from('land_claims').select('created_at').gte('created_at', sixMonthsAgo),
-      supabase.from('credit_transactions').select('amount')
-        .in('type', ['VERIFICATION', 'MINT']),
-      supabase.from('credit_transactions').select('amount')
-        .in('type', ['PURCHASE', 'SUBSCRIPTION_GRANT']),
-      supabase.from('subscriptions').select('*', { count: 'exact', head: true })
+      admin.from('land_claims').select('created_at').gte('created_at', sixMonthsAgo),
+      admin.from('credit_transactions').select('amount').in('type', ['VERIFICATION', 'MINT']),
+      admin.from('credit_transactions').select('amount').in('type', ['PURCHASE', 'SUBSCRIPTION_GRANT']),
+      admin.from('subscriptions').select('*', { count: 'exact', head: true })
         .eq('status', 'active').eq('plan_type', 'STARTER'),
-      supabase.from('subscriptions').select('*', { count: 'exact', head: true })
+      admin.from('subscriptions').select('*', { count: 'exact', head: true })
         .eq('status', 'active').eq('plan_type', 'PROFESSIONAL'),
-      supabase.from('subscriptions').select('*', { count: 'exact', head: true })
+      admin.from('subscriptions').select('*', { count: 'exact', head: true })
         .eq('status', 'active').eq('plan_type', 'ENTERPRISE'),
     ])
 
-    const totalCreditsUsed = (creditUsedData || [])
-      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0)
-    const totalCreditsPurchased = (creditPurchasedData || [])
-      .reduce((sum, t) => sum + (t.amount || 0), 0)
+    const totalCreditsUsed = (creditUsedData ?? [])
+      .reduce((sum, t) => sum + Math.abs((t as { amount: number }).amount || 0), 0)
+    const totalCreditsPurchased = (creditPurchasedData ?? [])
+      .reduce((sum, t) => sum + ((t as { amount: number }).amount || 0), 0)
 
-    // Calculate claims by month (last 6 months) using only date strings
     const claimsByMonth: { month: string; count: number }[] = []
     for (let i = 5; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
       const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-
-      const count = (claimDates || []).filter(c => {
-        const claimDate = new Date(c.created_at)
-        return claimDate >= date && claimDate < nextMonth
+      const count = (claimDates ?? []).filter(c => {
+        const d = new Date((c as { created_at: string }).created_at)
+        return d >= date && d < nextMonth
       }).length
-
       claimsByMonth.push({ month: monthKey, count })
     }
 
-    const verificationRate = (totalClaims || 0) > 0
-      ? ((verifiedClaims || 0) / (totalClaims || 1)) * 100
+    const verificationRate = (totalClaims ?? 0) > 0
+      ? ((verifiedClaims ?? 0) / (totalClaims ?? 1)) * 100
       : 0
 
-    const subscriptionsByPlan = {
-      STARTER: starterSubs || 0,
-      PROFESSIONAL: professionalSubs || 0,
-      ENTERPRISE: enterpriseSubs || 0,
-    }
-
     return NextResponse.json({
-      users: {
-        total: totalUsers || 0,
-      },
+      users: { total: totalUsers ?? 0 },
       claims: {
-        total: totalClaims || 0,
-        verified: verifiedClaims || 0,
-        pending: pendingClaims || 0,
-        disputed: disputedClaims || 0,
-        minted: mintedClaims || 0,
+        total: totalClaims ?? 0,
+        verified: verifiedClaims ?? 0,
+        pending: pendingClaims ?? 0,
+        disputed: disputedClaims ?? 0,
+        minted: mintedClaims ?? 0,
         verificationRate,
         byMonth: claimsByMonth,
       },
@@ -110,13 +96,15 @@ export async function GET(request: NextRequest) {
         used: totalCreditsUsed,
         purchased: totalCreditsPurchased,
       },
-      subscriptions: subscriptionsByPlan,
+      subscriptions: {
+        STARTER: starterSubs ?? 0,
+        PROFESSIONAL: professionalSubs ?? 0,
+        ENTERPRISE: enterpriseSubs ?? 0,
+      },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch analytics'
     console.error('Analytics error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch analytics' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -26,7 +26,7 @@ export default async function AdminLayout({
     // Only redirect if we KNOW the user's role and it's not an admin role.
     // If the profile query fails (e.g. RLS issue), allow through.
     if (profile && !profileError) {
-      if (!['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER', 'VERIFIER'].includes(profile.role)) {
+      if (!['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(profile.role)) {
         redirect('/dashboard')
       }
     }

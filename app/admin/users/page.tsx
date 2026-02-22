@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,13 +15,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Users,
-  UserPlus,
   Shield,
   Calendar,
-  CreditCard,
   MoreVertical,
   Search,
   Loader2,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
@@ -31,9 +30,8 @@ interface User {
   email: string
   full_name: string
   role: string
-  credits: number
   created_at: string
-  last_sign_in_at: string
+  last_sign_in_at: string | null
 }
 
 const ROLE_OPTIONS = [
@@ -49,12 +47,8 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
-  const [stats, setStats] = useState({
-    total: 0,
-    admins: 0,
-    verifiers: 0,
-    users: 0,
-  })
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [stats, setStats] = useState({ total: 0, admins: 0, verifiers: 0, users: 0 })
 
   useEffect(() => {
     loadUsers()
@@ -62,29 +56,32 @@ export default function AdminUsersPage() {
 
   const computeStats = (userData: User[]) => ({
     total: userData.length,
-    admins: userData.filter(u => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN' || u.role === 'PLATFORM_OWNER').length,
+    admins: userData.filter(u => ['ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER'].includes(u.role)).length,
     verifiers: userData.filter(u => u.role === 'VERIFIER').length,
     users: userData.filter(u => u.role === 'CLAIMANT').length,
   })
 
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message })
+    setTimeout(() => setNotification(null), 4000)
+  }
+
   const loadUsers = async () => {
     setLoading(true)
-    const supabase = createClient()
-
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from('user_profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      const userData: User[] = data || []
+      const res = await fetch('/api/admin/users')
+      if (!res.ok) {
+        const err = await res.json()
+        showNotification('error', err.error || 'Failed to load users')
+        return
+      }
+      const data = await res.json()
+      const userData: User[] = data.users || []
       setUsers(userData)
       setStats(computeStats(userData))
     } catch (error) {
       console.error('Error loading users:', error)
+      showNotification('error', 'Failed to load users')
     } finally {
       setLoading(false)
     }
@@ -98,14 +95,17 @@ export default function AdminUsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role: newRole }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
-        console.error('Role update failed:', data.error)
+        showNotification('error', data.error || 'Role update failed')
         return
       }
       const updated = users.map(u => u.id === userId ? { ...u, role: newRole } : u)
       setUsers(updated)
       setStats(computeStats(updated))
+      showNotification('success', `Role updated to ${newRole}`)
+    } catch {
+      showNotification('error', 'Network error — role not updated')
     } finally {
       setUpdatingUserId(null)
     }
@@ -130,16 +130,25 @@ export default function AdminUsersPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('admin.userManagement')}</h1>
-            <p className="text-gray-600">{t('admin.manageUsersDesc')}</p>
+
+        {/* Notification banner */}
+        {notification && (
+          <div className={`mb-4 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${
+            notification.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {notification.type === 'success'
+              ? <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              : <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+            {notification.message}
           </div>
-          <Button className="bg-emerald-600 hover:bg-emerald-700">
-            <UserPlus className="h-4 w-4 mr-2" />
-            {t('common.inviteUser')}
-          </Button>
+        )}
+
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-navy-900 mb-2">{t('admin.userManagement')}</h1>
+          <p className="text-gray-600">{t('admin.manageUsersDesc')}</p>
         </div>
 
         {/* Stats Cards */}
@@ -211,7 +220,7 @@ export default function AdminUsersPage() {
           <CardContent>
             {loading ? (
               <div className="text-center py-12">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent" />
                 <p className="mt-4 text-gray-600">Loading users...</p>
               </div>
             ) : filteredUsers.length === 0 ? (
@@ -229,9 +238,6 @@ export default function AdminUsersPage() {
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {t('common.role')}
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('common.credits')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {t('common.joined')}
@@ -262,12 +268,6 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           {getRoleBadge(user.role)}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1">
-                            <CreditCard className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{user.credits || 0}</span>
-                          </div>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex items-center gap-1">

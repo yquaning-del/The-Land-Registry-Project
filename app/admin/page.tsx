@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import {
@@ -12,7 +12,6 @@ import {
   Shield,
   Coins,
   TrendingUp,
-  TrendingDown,
   Clock,
   CheckCircle,
   AlertTriangle,
@@ -22,12 +21,12 @@ import {
   ArrowRight,
   RefreshCw,
   Eye,
-  Calendar,
   Crown,
+  Database,
+  Cpu,
+  Globe,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-const PLATFORM_OWNER_EMAIL = 'yquaning@gmail.com'
 
 interface DashboardStats {
   totalUsers: number
@@ -47,7 +46,6 @@ interface RecentActivity {
   type: 'claim_submitted' | 'claim_verified' | 'claim_minted' | 'user_registered' | 'payment_received'
   description: string
   timestamp: string
-  metadata?: any
 }
 
 interface PendingReview {
@@ -57,11 +55,19 @@ interface PendingReview {
   submittedAt: string
 }
 
+interface SystemStatus {
+  database: boolean
+  ai: boolean
+  blockchain: boolean
+  ipfs: boolean
+}
+
 export default function AdminDashboardPage() {
   const { t } = useLanguage()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([])
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [isPlatformOwner, setIsPlatformOwner] = useState(false)
@@ -77,121 +83,24 @@ export default function AdminDashboardPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       setUserEmail(user.email || null)
-      setIsPlatformOwner(user.email === PLATFORM_OWNER_EMAIL)
+      const ownerEmail = process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL
+      setIsPlatformOwner(!!(ownerEmail && user.email === ownerEmail))
     }
   }
 
   const loadDashboardData = async () => {
     setLoading(true)
-    const supabase = createClient()
-
     try {
-      // Get user stats
-      const { count: totalUsers } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const { count: newUsersToday } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', today.toISOString())
-
-      // Get claims stats
-      const { data: claims } = await supabase
-        .from('land_claims')
-        .select('id, ai_verification_status, mint_status, created_at, address, ai_confidence_score')
-
-      const claimsData = (claims || []) as any[]
-      const totalClaims = claimsData.length
-      const pendingClaims = claimsData.filter(c => 
-        c.ai_verification_status === 'PENDING_VERIFICATION' || 
-        c.ai_verification_status === 'PENDING_HUMAN_REVIEW'
-      ).length
-      const verifiedClaims = claimsData.filter(c => 
-        c.ai_verification_status === 'AI_VERIFIED' || 
-        c.ai_verification_status === 'APPROVED'
-      ).length
-      const disputedClaims = claimsData.filter(c => 
-        c.ai_verification_status === 'DISPUTED' || 
-        c.ai_verification_status === 'REJECTED'
-      ).length
-      const mintedClaims = claimsData.filter(c => c.mint_status === 'MINTED').length
-
-      // Get pending reviews
-      const pendingReviewClaims = claimsData
-        .filter(c => c.ai_verification_status === 'PENDING_HUMAN_REVIEW')
-        .slice(0, 5)
-        .map(c => ({
-          id: c.id,
-          address: c.address || 'Unknown location',
-          confidence: c.ai_confidence_score || 0,
-          submittedAt: c.created_at,
-        }))
-      setPendingReviews(pendingReviewClaims)
-
-      // Get credit transactions
-      const { data: transactions } = await supabase
-        .from('credit_transactions')
-        .select('amount, type')
-
-      const transactionsData = (transactions || []) as any[]
-      const totalCreditsUsed = transactionsData
-        .filter(t => t.type === 'VERIFICATION' || t.type === 'MINT')
-        .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0)
-
-      // Calculate verification rate
-      const verificationRate = totalClaims > 0 ? (verifiedClaims / totalClaims) * 100 : 0
-
-      setStats({
-        totalUsers: totalUsers || 0,
-        newUsersToday: newUsersToday || 0,
-        totalClaims,
-        pendingClaims,
-        verifiedClaims,
-        disputedClaims,
-        mintedClaims,
-        totalCreditsUsed,
-        totalRevenue: 0, // Would come from payment provider
-        verificationRate,
-      })
-
-      // Generate mock recent activity
-      const mockActivity: RecentActivity[] = [
-        {
-          id: '1',
-          type: 'claim_verified',
-          description: 'Claim #a1b2c3 verified with 94% confidence',
-          timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-        },
-        {
-          id: '2',
-          type: 'user_registered',
-          description: 'New user registered: john@example.com',
-          timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-        },
-        {
-          id: '3',
-          type: 'claim_minted',
-          description: 'NFT minted for claim #d4e5f6',
-          timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-        },
-        {
-          id: '4',
-          type: 'payment_received',
-          description: 'Payment received: Professional Plan ($99)',
-          timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-        },
-        {
-          id: '5',
-          type: 'claim_submitted',
-          description: 'New claim submitted from Accra, Ghana',
-          timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-        },
-      ]
-      setRecentActivity(mockActivity)
-
+      const res = await fetch('/api/admin/dashboard')
+      if (!res.ok) {
+        console.error('Dashboard API error:', await res.json())
+        return
+      }
+      const data = await res.json()
+      setStats(data.stats)
+      setRecentActivity(data.recentActivity ?? [])
+      setPendingReviews(data.pendingReviews ?? [])
+      setSystemStatus(data.systemStatus ?? null)
     } catch (error) {
       console.error('Error loading dashboard data:', error)
     } finally {
@@ -207,18 +116,12 @@ export default function AdminDashboardPage() {
 
   const getActivityIcon = (type: RecentActivity['type']) => {
     switch (type) {
-      case 'claim_submitted':
-        return <FileText className="h-4 w-4 text-blue-500" />
-      case 'claim_verified':
-        return <CheckCircle className="h-4 w-4 text-emerald-500" />
-      case 'claim_minted':
-        return <Coins className="h-4 w-4 text-purple-500" />
-      case 'user_registered':
-        return <Users className="h-4 w-4 text-blue-500" />
-      case 'payment_received':
-        return <TrendingUp className="h-4 w-4 text-emerald-500" />
-      default:
-        return <Activity className="h-4 w-4 text-gray-500" />
+      case 'claim_submitted':  return <FileText className="h-4 w-4 text-blue-500" />
+      case 'claim_verified':   return <CheckCircle className="h-4 w-4 text-emerald-500" />
+      case 'claim_minted':     return <Coins className="h-4 w-4 text-purple-500" />
+      case 'user_registered':  return <Users className="h-4 w-4 text-blue-500" />
+      case 'payment_received': return <TrendingUp className="h-4 w-4 text-emerald-500" />
+      default:                 return <Activity className="h-4 w-4 text-gray-500" />
     }
   }
 
@@ -236,7 +139,7 @@ export default function AdminDashboardPage() {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent" />
             <p className="mt-4 text-gray-600">Loading dashboard...</p>
           </div>
         </div>
@@ -247,6 +150,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
+
         {/* Platform Owner Banner */}
         {isPlatformOwner && (
           <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-4 text-white shadow-lg">
@@ -260,9 +164,7 @@ export default function AdminDashboardPage() {
                   Welcome back! You have full access to all platform data, analytics, and controls.
                 </p>
               </div>
-              <Badge className="ml-auto bg-white/20 text-white border-0">
-                {userEmail}
-              </Badge>
+              <Badge className="ml-auto bg-white/20 text-white border-0">{userEmail}</Badge>
             </div>
           </div>
         )}
@@ -274,8 +176,8 @@ export default function AdminDashboardPage() {
               {isPlatformOwner ? 'Platform Owner Dashboard' : t('admin.adminDashboard')}
             </h1>
             <p className="text-gray-600">
-              {isPlatformOwner 
-                ? 'Complete platform overview - all users, claims, and analytics' 
+              {isPlatformOwner
+                ? 'Complete platform overview — all users, claims, and analytics'
                 : 'Platform overview and monitoring'}
             </p>
           </div>
@@ -292,13 +194,13 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">{t('admin.totalUsers')}</p>
-                  <p className="text-3xl font-bold text-navy-900">{stats?.totalUsers || 0}</p>
-                  {stats?.newUsersToday ? (
+                  <p className="text-3xl font-bold text-navy-900">{stats?.totalUsers ?? 0}</p>
+                  {(stats?.newUsersToday ?? 0) > 0 && (
                     <p className="text-xs text-emerald-600 flex items-center mt-1">
                       <TrendingUp className="h-3 w-3 mr-1" />
-                      +{stats.newUsersToday} today
+                      +{stats!.newUsersToday} today
                     </p>
-                  ) : null}
+                  )}
                 </div>
                 <div className="p-3 bg-blue-100 rounded-lg">
                   <Users className="h-6 w-6 text-blue-600" />
@@ -312,10 +214,8 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">{t('admin.totalClaims')}</p>
-                  <p className="text-3xl font-bold text-navy-900">{stats?.totalClaims || 0}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {stats?.pendingClaims || 0} pending review
-                  </p>
+                  <p className="text-3xl font-bold text-navy-900">{stats?.totalClaims ?? 0}</p>
+                  <p className="text-xs text-gray-500 mt-1">{stats?.pendingClaims ?? 0} pending review</p>
                 </div>
                 <div className="p-3 bg-emerald-100 rounded-lg">
                   <FileText className="h-6 w-6 text-emerald-600" />
@@ -330,11 +230,9 @@ export default function AdminDashboardPage() {
                 <div>
                   <p className="text-sm text-gray-600">{t('admin.verificationRate')}</p>
                   <p className="text-3xl font-bold text-navy-900">
-                    {stats?.verificationRate.toFixed(1) || 0}%
+                    {(stats?.verificationRate ?? 0).toFixed(1)}%
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {stats?.verifiedClaims || 0} verified
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">{stats?.verifiedClaims ?? 0} verified</p>
                 </div>
                 <div className="p-3 bg-purple-100 rounded-lg">
                   <Shield className="h-6 w-6 text-purple-600" />
@@ -348,10 +246,8 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">{t('admin.creditsUsed')}</p>
-                  <p className="text-3xl font-bold text-navy-900">{stats?.totalCreditsUsed || 0}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {stats?.mintedClaims || 0} NFTs minted
-                  </p>
+                  <p className="text-3xl font-bold text-navy-900">{stats?.totalCreditsUsed ?? 0}</p>
+                  <p className="text-xs text-gray-500 mt-1">{stats?.mintedClaims ?? 0} NFTs minted</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">
                   <Coins className="h-6 w-6 text-yellow-600" />
@@ -361,7 +257,7 @@ export default function AdminDashboardPage() {
           </Card>
         </div>
 
-        {/* Claims Status Breakdown */}
+        {/* Claims Status Breakdown + Real Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -374,28 +270,29 @@ export default function AdminDashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
                   <Clock className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-yellow-700">{stats?.pendingClaims || 0}</p>
+                  <p className="text-2xl font-bold text-yellow-700">{stats?.pendingClaims ?? 0}</p>
                   <p className="text-sm text-yellow-600">Pending</p>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
                   <CheckCircle className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-emerald-700">{stats?.verifiedClaims || 0}</p>
+                  <p className="text-2xl font-bold text-emerald-700">{stats?.verifiedClaims ?? 0}</p>
                   <p className="text-sm text-emerald-600">Verified</p>
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                   <XCircle className="h-8 w-8 text-red-600 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-red-700">{stats?.disputedClaims || 0}</p>
+                  <p className="text-2xl font-bold text-red-700">{stats?.disputedClaims ?? 0}</p>
                   <p className="text-sm text-red-600">Disputed</p>
                 </div>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
                   <Coins className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                  <p className="text-2xl font-bold text-purple-700">{stats?.mintedClaims || 0}</p>
+                  <p className="text-2xl font-bold text-purple-700">{stats?.mintedClaims ?? 0}</p>
                   <p className="text-sm text-purple-600">Minted</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Real Recent Activity */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -404,17 +301,21 @@ export default function AdminDashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    {getActivityIcon(activity.type)}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 truncate">{activity.description}</p>
-                      <p className="text-xs text-gray-400">{formatTimeAgo(activity.timestamp)}</p>
+              {recentActivity.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">No recent activity</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentActivity.map((activity) => (
+                    <div key={activity.id} className="flex items-start gap-3">
+                      {getActivityIcon(activity.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 truncate">{activity.description}</p>
+                        <p className="text-xs text-gray-400">{formatTimeAgo(activity.timestamp)}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -434,7 +335,6 @@ export default function AdminDashboardPage() {
                   </Button>
                 </Link>
               </div>
-              <CardDescription>Claims requiring manual verification</CardDescription>
             </CardHeader>
             <CardContent>
               {pendingReviews.length === 0 ? (
@@ -445,18 +345,16 @@ export default function AdminDashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {pendingReviews.map((review) => (
-                    <Link 
-                      key={review.id} 
-                      href={`/admin/claims/${review.id}`}
+                    <Link
+                      key={review.id}
+                      href={`/claims/${review.id}`}
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                     >
                       <div>
                         <p className="font-medium text-navy-900 truncate max-w-[200px]">
                           {review.address}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {formatTimeAgo(review.submittedAt)}
-                        </p>
+                        <p className="text-xs text-gray-500">{formatTimeAgo(review.submittedAt)}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className={
@@ -478,7 +376,6 @@ export default function AdminDashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('admin.quickActions')}</CardTitle>
-              <CardDescription>Common admin tasks</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -486,14 +383,14 @@ export default function AdminDashboardPage() {
                   <div className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-center cursor-pointer">
                     <FileText className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
                     <p className="font-medium text-navy-900">Review Claims</p>
-                    <p className="text-xs text-gray-500">{stats?.pendingClaims || 0} pending</p>
+                    <p className="text-xs text-gray-500">{stats?.pendingClaims ?? 0} pending</p>
                   </div>
                 </Link>
                 <Link href="/admin/users">
                   <div className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-center cursor-pointer">
                     <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
                     <p className="font-medium text-navy-900">Manage Users</p>
-                    <p className="text-xs text-gray-500">{stats?.totalUsers || 0} total</p>
+                    <p className="text-xs text-gray-500">{stats?.totalUsers ?? 0} total</p>
                   </div>
                 </Link>
                 <Link href="/admin/analytics">
@@ -515,7 +412,7 @@ export default function AdminDashboardPage() {
           </Card>
         </div>
 
-        {/* System Status */}
+        {/* System Status — real env-var checks, not hardcoded */}
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -524,38 +421,30 @@ export default function AdminDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                <div>
-                  <p className="font-medium text-navy-900">API</p>
-                  <p className="text-xs text-gray-500">Operational</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {[
+                { label: 'Database',     subtitle: 'Supabase PostgreSQL', ok: systemStatus?.database ?? true,     icon: <Database className="h-4 w-4" /> },
+                { label: 'AI Service',   subtitle: 'OpenAI GPT-4 Vision', ok: systemStatus?.ai ?? false,         icon: <Cpu className="h-4 w-4" /> },
+                { label: 'Blockchain',   subtitle: 'Polygon Amoy',        ok: systemStatus?.blockchain ?? false,  icon: <Globe className="h-4 w-4" /> },
+                { label: 'IPFS Storage', subtitle: 'Pinata Gateway',      ok: systemStatus?.ipfs ?? false,        icon: <Shield className="h-4 w-4" /> },
+              ].map(({ label, subtitle, ok, icon }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 ${ok ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`} />
+                  <div className="flex items-center gap-2">
+                    <span className={ok ? 'text-gray-500' : 'text-red-400'}>{icon}</span>
+                    <div>
+                      <p className="font-medium text-navy-900 text-sm">{label}</p>
+                      <p className={`text-xs ${ok ? 'text-gray-500' : 'text-red-500'}`}>
+                        {ok ? subtitle : 'Not configured'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                <div>
-                  <p className="font-medium text-navy-900">Database</p>
-                  <p className="text-xs text-gray-500">Operational</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                <div>
-                  <p className="font-medium text-navy-900">Blockchain</p>
-                  <p className="text-xs text-gray-500">Polygon Amoy</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                <div>
-                  <p className="font-medium text-navy-900">IPFS</p>
-                  <p className="text-xs text-gray-500">Pinata Gateway</p>
-                </div>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
+
       </div>
     </div>
   )

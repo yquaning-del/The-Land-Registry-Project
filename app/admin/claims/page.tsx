@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { useLanguage } from '@/lib/i18n/LanguageProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -57,54 +56,17 @@ export default function AdminClaimsPage() {
 
   const loadClaims = async () => {
     setLoading(true)
-    const supabase = createClient()
-
     try {
-      // Stats always reflect global totals — run in parallel with filtered query
-      const statsQuery = supabase
-        .from('land_claims')
-        .select('ai_verification_status', { count: 'exact' })
-
-      let claimsQuery = supabase
-        .from('land_claims')
-        .select(`
-          id, claimant_id, parcel_id_barcode, document_metadata, address,
-          ai_verification_status, document_type, created_at,
-          user_profiles:claimant_id (full_name)
-        `, { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
-
-      if (filter !== 'all') {
-        claimsQuery = claimsQuery.eq('ai_verification_status', filter)
+      const params = new URLSearchParams({ page: String(page), filter })
+      const res = await fetch(`/api/admin/claims?${params}`)
+      if (!res.ok) {
+        console.error('Claims API error:', await res.json())
+        return
       }
-
-      const [{ data: allStatusData }, { data, count, error }] = await Promise.all([
-        statsQuery,
-        claimsQuery,
-      ])
-
-      if (error) throw error
-
-      setClaims((data || []) as unknown as LandClaim[])
-      setTotalFiltered(count || 0)
-
-      const all: any[] = allStatusData || []
-      setStats({
-        total: all.length,
-        pending: all.filter((c: any) =>
-          c.ai_verification_status === 'PENDING_VERIFICATION' ||
-          c.ai_verification_status === 'PENDING_HUMAN_REVIEW'
-        ).length,
-        verified: all.filter((c: any) =>
-          c.ai_verification_status === 'AI_VERIFIED' ||
-          c.ai_verification_status === 'APPROVED'
-        ).length,
-        disputed: all.filter((c: any) =>
-          c.ai_verification_status === 'DISPUTED' ||
-          c.ai_verification_status === 'REJECTED'
-        ).length,
-      })
+      const data = await res.json()
+      setClaims(data.claims ?? [])
+      setStats(data.stats ?? { total: 0, pending: 0, verified: 0, disputed: 0 })
+      setTotalFiltered(data.count ?? 0)
     } catch (error) {
       console.error('Error loading claims:', error)
     } finally {
@@ -188,11 +150,11 @@ export default function AdminClaimsPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'all', label: 'All Claims' },
+                { value: 'all',                  label: 'All Claims' },
                 { value: 'PENDING_HUMAN_REVIEW', label: 'Human Review' },
                 { value: 'PENDING_VERIFICATION', label: 'Pending' },
-                { value: 'AI_VERIFIED', label: 'Verified' },
-                { value: 'REJECTED', label: 'Rejected' },
+                { value: 'AI_VERIFIED',          label: 'Verified' },
+                { value: 'REJECTED',             label: 'Rejected' },
               ].map(({ value, label }) => (
                 <Button
                   key={value}
@@ -211,7 +173,10 @@ export default function AdminClaimsPage() {
           <CardHeader>
             <CardTitle>Claims List</CardTitle>
             <CardDescription>
-              {loading ? 'Loading claims...' : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalFiltered)} of ${totalFiltered} claim(s)`}
+              {loading
+                ? 'Loading claims...'
+                : `Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalFiltered)} of ${totalFiltered} claim(s)`
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -270,7 +235,7 @@ export default function AdminClaimsPage() {
                           {new Date(claim.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm">
-                          <Link href={`/admin/claims/${claim.id}`}>
+                          <Link href={`/claims/${claim.id}`}>
                             <Button size="sm" variant="outline">
                               <Eye className="h-4 w-4 mr-1" />
                               {t('common.view')}
