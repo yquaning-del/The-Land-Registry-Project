@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import { Navbar } from '@/components/Navbar'
 import { Button } from '@/components/ui/button'
 import { BentoGrid } from '@/components/homepage/BentoGrid'
@@ -10,7 +12,18 @@ import { VerificationFlow } from '@/components/homepage/VerificationFlow'
 import { VerificationDemo } from '@/components/homepage/VerificationDemo'
 import { TrustScoreCalculator } from '@/components/home/TrustScoreCalculator'
 import { TrustFAQ } from '@/components/home/TrustFAQ'
-import { Shield, CheckCircle, ArrowRight, Mail, Phone, MapPinIcon, Sparkles } from 'lucide-react'
+import { BlockchainNetworkBg } from '@/components/homepage/BlockchainNetworkBg'
+import { StatsSection } from '@/components/homepage/StatsSection'
+import { Shield, CheckCircle, ArrowRight, Mail, Phone, MapPinIcon, Sparkles, ChevronDown } from 'lucide-react'
+
+const heroContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.13, delayChildren: 0.2 } },
+}
+const heroItem = {
+  hidden: { opacity: 0, y: 28 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } },
+}
 
 export default function Home() {
   const [showDemo, setShowDemo] = useState(false)
@@ -18,57 +31,161 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       <Navbar />
-      
-      {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-navy-900 via-navy-800 to-navy-900 text-white overflow-hidden">
-        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
-        <div className="container mx-auto px-4 py-20 lg:py-32 relative">
-          <div className="max-w-5xl mx-auto text-center">
-            <div className="animate-slide-up">
-              <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-2 mb-6">
-                <Sparkles className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-emerald-400 font-semibold">AI-Powered • Blockchain-Secured</span>
-              </div>
-              <h1 className="text-5xl lg:text-7xl font-bold mb-6 leading-tight">
-                The Gold Standard for <span className="text-emerald-400">Land Title Integrity</span> in Africa
-              </h1>
-              <p className="text-xl lg:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
-                AI-driven verification meets Blockchain immutability. Built for Law Firms, Banks, and Developers.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/sign-up">
-                  <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white text-lg px-8 py-6">
-                    Start Free Trial
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <Link href="/pricing">
-                  <Button size="lg" className="text-lg px-8 py-6 bg-[#4B9CD3] hover:bg-[#3A8BC2] text-white border-0">
-                    View Pricing
-                  </Button>
-                </Link>
-              </div>
-              <div className="flex items-center justify-center gap-6 mt-8 text-sm text-gray-400">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
-                  <span>5 Free Credits</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
-                  <span>No Credit Card Required</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
-                  <span>Enterprise-Grade Security</span>
-                </div>
-              </div>
-            </div>
-          </div>
+
+      {/* ── Hero Section ── */}
+      <section className="relative min-h-[92vh] flex items-center bg-[#060d18] overflow-hidden">
+
+        {/* Layer 1: Aerial satellite land photo */}
+        <Image
+          src="https://images.unsplash.com/photo-1446941611757-91d2c3bd3d45?w=1920&q=80"
+          alt="Aerial view of land"
+          fill
+          priority
+          className="object-cover"
+          style={{ opacity: 0.22 }}
+        />
+
+        {/* Layer 2: Deep gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#060d18]/97 via-[#0a1628]/88 to-[#071a14]/80" />
+
+        {/* Radial emerald glow centre */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 65%)' }}
+          />
         </div>
+
+        {/* Layer 3: Animated blockchain network */}
+        <BlockchainNetworkBg />
+
+        {/* Content */}
+        <div className="relative z-10 w-full container mx-auto px-4 py-28 text-center">
+          <motion.div
+            className="max-w-5xl mx-auto"
+            variants={heroContainer}
+            initial="hidden"
+            animate="show"
+          >
+            {/* Badge */}
+            <motion.div variants={heroItem} className="flex justify-center mb-7">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/30 bg-emerald-500/8 backdrop-blur-sm">
+                <Sparkles className="h-4 w-4 text-emerald-400" />
+                <span className="text-sm text-emerald-400 font-semibold tracking-wide">AI-Powered • Blockchain-Secured</span>
+              </div>
+            </motion.div>
+
+            {/* Headline */}
+            <motion.h1
+              variants={heroItem}
+              className="text-5xl lg:text-7xl font-bold mb-6 leading-[1.08] tracking-tight text-white"
+            >
+              The Gold Standard for{' '}
+              <span
+                className="inline-block"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #34d399 45%, #6ee7b7 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                Land Title Integrity
+              </span>{' '}
+              in Africa
+            </motion.h1>
+
+            {/* Subtext */}
+            <motion.p
+              variants={heroItem}
+              className="text-xl lg:text-2xl text-gray-300/90 mb-10 max-w-3xl mx-auto leading-relaxed"
+            >
+              AI-driven verification meets Blockchain immutability. Built for Law Firms, Banks, and Developers.
+            </motion.p>
+
+            {/* CTA buttons */}
+            <motion.div
+              variants={heroItem}
+              className="flex flex-col sm:flex-row gap-4 justify-center"
+            >
+              <Link href="/sign-up">
+                <Button
+                  size="lg"
+                  className="text-lg px-9 py-6 font-semibold shadow-lg shadow-emerald-500/25"
+                  style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none', color: '#fff' }}
+                >
+                  Start Free Trial
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/pricing">
+                <Button
+                  size="lg"
+                  className="text-lg px-9 py-6 font-semibold border border-white/20 bg-white/8 text-white backdrop-blur-sm hover:bg-white/14 transition-colors"
+                >
+                  View Pricing
+                </Button>
+              </Link>
+            </motion.div>
+
+            {/* Trust checkmarks */}
+            <motion.div
+              variants={heroItem}
+              className="flex flex-wrap items-center justify-center gap-5 mt-8 text-sm text-gray-400"
+            >
+              {['5 Free Credits', 'No Credit Card Required', 'Enterprise-Grade Security'].map(t => (
+                <span key={t} className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                  {t}
+                </span>
+              ))}
+            </motion.div>
+
+            {/* Stat chips */}
+            <motion.div
+              variants={heroItem}
+              className="flex flex-wrap justify-center gap-3 mt-10"
+            >
+              {[
+                { value: '1,200+', label: 'Users' },
+                { value: '50K+',   label: 'Verifications' },
+                { value: '99.8%',  label: 'AI Accuracy' },
+              ].map(s => (
+                <div
+                  key={s.label}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10 text-sm"
+                  style={{ background: 'rgba(255,255,255,0.05)' }}
+                >
+                  <span className="font-bold text-emerald-400">{s.value}</span>
+                  <span className="text-gray-400">{s.label}</span>
+                </div>
+              ))}
+            </motion.div>
+          </motion.div>
+        </div>
+
+        {/* Scroll indicator */}
+        <motion.div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-gray-500"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.4, duration: 0.6 }}
+        >
+          <span className="text-xs tracking-widest uppercase">Scroll</span>
+          <motion.div
+            animate={{ y: [0, 6, 0] }}
+            transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+          >
+            <ChevronDown className="h-5 w-5" />
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* Trust Marquee */}
       <TrustMarquee />
+
+      {/* Animated stats bar */}
+      <StatsSection />
 
       {/* Verification Flow - 4 Step Guide */}
       <VerificationFlow onTryDemo={() => setShowDemo(true)} />
@@ -83,30 +200,66 @@ export default function Home() {
       {/* Bento Grid Features */}
       <BentoGrid />
 
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-br from-navy-900 via-emerald-900 to-navy-900 text-white">
-        <div className="container mx-auto px-4 text-center">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-6">
+      {/* ── CTA Section ── */}
+      <section className="relative py-24 overflow-hidden text-white">
+
+        {/* Background: circuit board / tech macro */}
+        <Image
+          src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=80"
+          alt="Technology background"
+          fill
+          className="object-cover"
+          style={{ opacity: 0.18 }}
+        />
+
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#060d18]/96 via-[#052e1c]/90 to-[#060d18]/96" />
+
+        {/* Subtle emerald radial glow */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(16,185,129,0.08) 0%, transparent 70%)' }}
+        />
+
+        <div className="relative z-10 container mx-auto px-4 text-center">
+          <div
+            className="max-w-3xl mx-auto rounded-3xl p-10 border border-white/10 backdrop-blur-sm"
+            style={{ background: 'rgba(255,255,255,0.04)' }}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/8 mb-6">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-400 font-semibold tracking-wide uppercase">Start Today</span>
+            </div>
+
+            <h2 className="text-4xl lg:text-5xl font-bold mb-5 leading-tight">
               Ready to Secure Your Land Titles?
             </h2>
-            <p className="text-xl text-gray-300 mb-8">
-              Join 1,200+ users who trust our platform for land title verification. Start with 5 free credits—no credit card required.
+            <p className="text-lg text-gray-300 mb-8 max-w-xl mx-auto">
+              Join 1,200+ users who trust our platform for land title verification. Start with 5 free credits — no credit card required.
             </p>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/sign-up">
-                <Button size="lg" className="bg-white text-navy-900 hover:bg-gray-100 text-lg px-8 py-6">
+                <Button
+                  size="lg"
+                  className="text-lg px-9 py-6 font-semibold shadow-lg shadow-emerald-500/20"
+                  style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none', color: '#fff' }}
+                >
                   Start Free Trial
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
               <Link href="/pricing">
-                <Button size="lg" className="text-lg px-8 py-6 bg-[#4B9CD3] hover:bg-[#3A8BC2] text-white border-0">
+                <Button
+                  size="lg"
+                  className="text-lg px-9 py-6 font-semibold bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-colors"
+                >
                   View Pricing Plans
                 </Button>
               </Link>
             </div>
-            <div className="mt-8 flex items-center justify-center gap-8 text-sm">
+
+            <div className="mt-8 flex items-center justify-center gap-8 text-sm text-gray-400">
               <div className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-emerald-400" />
                 <span>ISO 27001 Certified</span>
