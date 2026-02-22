@@ -11,6 +11,10 @@ interface Node {
   phase: number
 }
 
+const NODE_COUNT = 25       // reduced from 38 → 300 connection checks/frame vs 703
+const CONNECTION_DIST = 155
+const FRAME_MS = 1000 / 24  // throttle to 24fps (~41.6ms) to free the main thread
+
 export function BlockchainNetworkBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -23,8 +27,7 @@ export function BlockchainNetworkBg() {
 
     let animId: number
     let nodes: Node[] = []
-    const NODE_COUNT = 38
-    const CONNECTION_DIST = 160
+    let lastFrame = 0
 
     const resize = () => {
       canvas.width = canvas.offsetWidth
@@ -43,6 +46,12 @@ export function BlockchainNetworkBg() {
     }
 
     const draw = (time: number) => {
+      animId = requestAnimationFrame(draw)
+
+      // Throttle: skip frame if not enough time has elapsed
+      if (time - lastFrame < FRAME_MS) return
+      lastFrame = time
+
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       const t = time * 0.001
 
@@ -61,7 +70,7 @@ export function BlockchainNetworkBg() {
           const dy = nodes[j].y - nodes[i].y
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist < CONNECTION_DIST) {
-            const alpha = (1 - dist / CONNECTION_DIST) * 0.25
+            const alpha = (1 - dist / CONNECTION_DIST) * 0.22
             ctx.beginPath()
             ctx.strokeStyle = `rgba(16,185,129,${alpha})`
             ctx.lineWidth = 0.8
@@ -72,18 +81,15 @@ export function BlockchainNetworkBg() {
         }
       }
 
-      // Draw nodes
+      // Draw nodes — simple circles only (no createRadialGradient per node)
       nodes.forEach(n => {
         const pulse = 0.5 + 0.5 * Math.sin(t * 1.2 + n.phase)
         const alpha = 0.4 + 0.4 * pulse
 
-        // Outer glow ring
-        const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.radius * 4)
-        grad.addColorStop(0, `rgba(16,185,129,${alpha * 0.6})`)
-        grad.addColorStop(1, 'rgba(16,185,129,0)')
+        // Soft glow: single low-opacity larger circle
         ctx.beginPath()
-        ctx.arc(n.x, n.y, n.radius * 4, 0, Math.PI * 2)
-        ctx.fillStyle = grad
+        ctx.arc(n.x, n.y, n.radius * 3.5, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(16,185,129,${alpha * 0.12})`
         ctx.fill()
 
         // Core dot
@@ -92,8 +98,6 @@ export function BlockchainNetworkBg() {
         ctx.fillStyle = `rgba(16,185,129,${alpha})`
         ctx.fill()
       })
-
-      animId = requestAnimationFrame(draw)
     }
 
     resize()

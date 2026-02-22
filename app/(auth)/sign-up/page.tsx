@@ -39,34 +39,31 @@ export default function SignUpPage() {
 
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            full_name: fullName,
-          },
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: { full_name: fullName },
+          // Route through /api/auth/callback so the code is exchanged for a session
+          emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
         },
       })
 
       if (error) throw error
 
-      // Complete signup process (grant credits, create profile)
-      try {
-        const response = await fetch('/api/auth/signup-complete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fullName }),
-        })
-
-        if (!response.ok) {
-          console.error('Failed to complete signup:', await response.text())
+      // If a session exists, email confirmation is disabled — complete profile setup now.
+      // If session is null, user must confirm email first; the DB trigger handles
+      // profile + credits creation automatically on auth.users INSERT.
+      if (signUpData.session) {
+        try {
+          await fetch('/api/auth/signup-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullName }),
+          })
+        } catch (completeError) {
+          console.error('Signup completion error:', completeError)
         }
-      } catch (completeError) {
-        console.error('Signup completion error:', completeError)
       }
 
       setSuccess(true)

@@ -8,7 +8,10 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      // No session yet — user likely needs to confirm their email first.
+      // The DB trigger (handle_new_user_profile + ensure_credits_on_signup) handles
+      // profile/credits creation automatically, so nothing is lost.
+      return NextResponse.json({ success: true, pending: true })
     }
 
     const { fullName } = await request.json()
