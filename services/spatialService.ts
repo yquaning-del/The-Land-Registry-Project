@@ -211,13 +211,24 @@ export class SpatialConflictService {
 
       try {
         const baseUrl = this.getApiBaseUrl()
-        const res = await fetch(`${baseUrl}/api/satellite/geofence`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ lat: centroid.lat, lng: centroid.lng }),
-        })
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 8000)
+        let res: Response
+        try {
+          res = await fetch(`${baseUrl}/api/satellite/geofence`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: centroid.lat, lng: centroid.lng }),
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId)
+          if (fetchErr.name === 'AbortError') {
+            console.warn('⚠️ Satellite geofence API timed out after 8s — falling back to mock check')
+          }
+          throw fetchErr
+        }
 
         if (res.ok) {
           const data = (await res.json()) as SatelliteGeofenceResult
@@ -265,6 +276,7 @@ export class SpatialConflictService {
   private async performMockSatelliteCheck(
     centroid: Coordinate
   ): Promise<SatelliteGeofenceResult> {
+    console.warn('⚠️ Using MOCK satellite check — real Sentinel Hub API is not available. Do not rely on this result in production.')
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 500))
 
@@ -316,7 +328,7 @@ export class SpatialConflictService {
    */
   async getGrantorHistory(grantorName: string): Promise<GrantorHistoryResult> {
     try {
-      if (!grantorName || grantorName.trim().length < 2) {
+      if (!grantorName || grantorName.trim().length < 2 || grantorName.length > 100) {
         return {
           grantorName: grantorName || 'Unknown',
           totalClaims: 0,
@@ -494,15 +506,19 @@ export class SpatialConflictService {
         return false
       }
 
-      // Log the conflict for each overlapping claim
+      // Log the conflict for each overlapping claim — use UPSERT to avoid
+      // unique-constraint violations on concurrent conflict detection
       for (const conflict of conflictResult.conflictingClaims) {
-        await this.supabase.from('spatial_conflicts').insert({
-          claim_id: claimId,
-          conflicting_claim_id: conflict.claimId,
-          overlap_area_sqm: conflict.overlapAreaSqm,
-          overlap_percentage: conflict.overlapPercentage,
-          status: 'PENDING_REVIEW',
-        })
+        await this.supabase.from('spatial_conflicts').upsert(
+          {
+            claim_id: claimId,
+            conflicting_claim_id: conflict.claimId,
+            overlap_area_sqm: conflict.overlapAreaSqm,
+            overlap_percentage: conflict.overlapPercentage,
+            status: 'PENDING_REVIEW',
+          },
+          { onConflict: 'claim_id,conflicting_claim_id', ignoreDuplicates: true }
+        )
       }
 
       return true

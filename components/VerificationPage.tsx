@@ -87,18 +87,33 @@ export function VerificationPage({ contractAddress, tokenId }: VerificationPageP
         setError(null)
 
         let metadataUrl = tokenURI as string
-        
+
         if (metadataUrl.startsWith('ipfs://')) {
-          metadataUrl = metadataUrl.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')
-        }
+          const ipfsHash = metadataUrl.slice('ipfs://'.length)
+          const gateways = [
+            `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+            `https://ipfs.io/ipfs/${ipfsHash}`,
+            `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`,
+          ]
+          metadataUrl = gateways[0]
 
-        const response = await fetch(metadataUrl)
-        if (!response.ok) {
-          throw new Error('Failed to fetch metadata')
+          // Try each gateway in order until one succeeds
+          let response: Response | null = null
+          for (const gw of gateways) {
+            try {
+              const r = await fetch(gw)
+              if (r.ok) { response = r; break }
+            } catch { /* try next gateway */ }
+          }
+          if (!response) throw new Error('Failed to fetch metadata from all IPFS gateways')
+          const data = await response.json()
+          setMetadata(data)
+        } else {
+          const response = await fetch(metadataUrl)
+          if (!response.ok) throw new Error('Failed to fetch metadata')
+          const data = await response.json()
+          setMetadata(data)
         }
-
-        const data = await response.json()
-        setMetadata(data)
       } catch (err) {
         console.error('Error fetching metadata:', err)
         setError(err instanceof Error ? err.message : 'Failed to load NFT metadata')
@@ -346,7 +361,9 @@ export function VerificationPage({ contractAddress, tokenId }: VerificationPageP
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Document Image</h3>
                 <img
-                  src={metadata.image.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')}
+                  src={metadata.image.startsWith('ipfs://')
+                    ? `https://gateway.pinata.cloud/ipfs/${metadata.image.slice('ipfs://'.length)}`
+                    : metadata.image}
                   alt="Land Deed"
                   className="w-full rounded border border-gray-200"
                 />
