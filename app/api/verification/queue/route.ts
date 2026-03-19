@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ClaimStatus } from '@/types/database.types'
 
 const PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL || ''
 const REVIEWER_ROLES = ['VERIFIER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
@@ -20,7 +21,17 @@ async function getReviewerRole(
   return null
 }
 
-export async function GET() {
+const VALID_STATUSES: ClaimStatus[] = [
+  'PENDING_VERIFICATION',
+  'AI_VERIFIED',
+  'PENDING_HUMAN_REVIEW',
+  'PENDING_CLARIFICATION',
+  'APPROVED',
+  'REJECTED',
+  'DISPUTED',
+]
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -31,16 +42,28 @@ export async function GET() {
 
     const admin = createAdminClient()
 
+    // Optional ?status= filter. If absent, return all claims for reviewers.
+    const { searchParams } = new URL(request.url)
+    const statusParam = searchParams.get('status') as ClaimStatus | null
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: claims, error: claimsError } = await (admin as any)
+    let query = (admin as any)
       .from('land_claims')
       .select(`
         id, claimant_id, parcel_id_barcode, document_metadata, address, region,
         ai_verification_status, ai_confidence_score, ai_confidence_level,
         ai_verification_metadata, created_at,
+        clarification_message, clarification_response,
+        clarification_requested_by, clarification_requested_at, clarification_responded_at,
         user_profiles:claimant_id (full_name)
       `)
-      .eq('ai_verification_status', 'PENDING_HUMAN_REVIEW')
+
+    if (statusParam && VALID_STATUSES.includes(statusParam)) {
+      query = query.eq('ai_verification_status', statusParam)
+    }
+
+    // PENDING_HUMAN_REVIEW first, then oldest first within each status
+    const { data: claims, error: claimsError } = await query
       .order('created_at', { ascending: true })
 
     if (claimsError) throw claimsError

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Eye, Clock, AlertCircle, MessageSquare, CheckCircle, XCircle, Loader2,
+  Eye, Clock, AlertCircle, MessageSquare, CheckCircle, XCircle, Loader2, HelpCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -25,24 +25,50 @@ interface ClaimRow {
   ai_verification_metadata: { reasoning?: string[] } | null
   created_at: string
   region: string | null
+  clarification_message: string | null
+  clarification_response: string | null
+  clarification_requested_at: string | null
+  clarification_responded_at: string | null
   // reviewer-only fields
   user_profiles?: { full_name: string | null } | null
 }
 
+type StatusTab = 'ALL' | 'PENDING_HUMAN_REVIEW' | 'PENDING_CLARIFICATION' | 'AI_VERIFIED' | 'APPROVED' | 'REJECTED'
+
+interface StatusTabConfig {
+  key: StatusTab
+  label: string
+  apiParam: string | null
+}
+
 const REVIEWER_ROLES = ['VERIFIER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
+
+const STATUS_TABS: StatusTabConfig[] = [
+  { key: 'ALL', label: 'All', apiParam: null },
+  { key: 'PENDING_HUMAN_REVIEW', label: 'Pending Review', apiParam: 'PENDING_HUMAN_REVIEW' },
+  { key: 'PENDING_CLARIFICATION', label: 'Awaiting Claimant', apiParam: 'PENDING_CLARIFICATION' },
+  { key: 'AI_VERIFIED', label: 'AI Verified', apiParam: 'AI_VERIFIED' },
+  { key: 'APPROVED', label: 'Approved', apiParam: 'APPROVED' },
+  { key: 'REJECTED', label: 'Rejected', apiParam: 'REJECTED' },
+]
+
+// Statuses where a reviewer can take action (approve / reject / request clarification)
+const ACTIONABLE_STATUSES = ['PENDING_HUMAN_REVIEW']
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function VerificationQueuePage() {
   const { t } = useLanguage()
   const [role, setRole] = useState<string | null>(null)           // null = loading
-  const [userId, setUserId] = useState<string | null>(null)
   const [claims, setClaims] = useState<ClaimRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<StatusTab>('PENDING_HUMAN_REVIEW')
 
   // Reviewer action state (per-claim)
   const [actionClaimId, setActionClaimId] = useState<string | null>(null)
+  const [actionMode, setActionMode] = useState<'review' | 'clarify' | null>(null)
   const [notes, setNotes] = useState('')
+  const [clarificationMessage, setClarificationMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -52,7 +78,6 @@ export default function VerificationQueuePage() {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) { setRole('CLAIMANT'); setLoading(false); return }
-      setUserId(data.user.id)
 
       // Email bypass for platform owner
       const ownerEmail = process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL
@@ -80,7 +105,11 @@ export default function VerificationQueuePage() {
 
     if (isReviewer) {
       // VERIFIER / ADMIN / SUPER_ADMIN / PLATFORM_OWNER → use reviewer API
-      const res = await fetch('/api/verification/queue')
+      const tabConfig = STATUS_TABS.find(t => t.key === activeTab)
+      const url = tabConfig?.apiParam
+        ? `/api/verification/queue?status=${tabConfig.apiParam}`
+        : '/api/verification/queue'
+      const res = await fetch(url)
       if (res.ok) {
         const json = await res.json()
         setClaims(json.claims ?? [])
@@ -93,26 +122,33 @@ export default function VerificationQueuePage() {
 
       const { data } = await supabase
         .from('land_claims')
-        .select('id, parcel_id_barcode, document_metadata, address, ai_verification_status, ai_confidence_score, ai_confidence_level, ai_verification_metadata, created_at, region')
+        .select('id, parcel_id_barcode, document_metadata, address, ai_verification_status, ai_confidence_score, ai_confidence_level, ai_verification_metadata, created_at, region, clarification_message, clarification_response, clarification_requested_at, clarification_responded_at')
         .eq('claimant_id', user.id)
-        .in('ai_verification_status', ['PENDING_VERIFICATION', 'PENDING_HUMAN_REVIEW'])
+        .in('ai_verification_status', ['PENDING_VERIFICATION', 'PENDING_HUMAN_REVIEW', 'PENDING_CLARIFICATION'])
         .order('created_at', { ascending: false })
 
       setClaims(data ?? [])
     }
 
     setLoading(false)
-  }, [role, isReviewer])
+  }, [role, isReviewer, activeTab])
 
   useEffect(() => {
     if (role !== null) loadClaims()
   }, [role, loadClaims])
 
-  // ── Reviewer approve/reject ───────────────────────────────────────────────
+  // ── Reviewer: approve / reject ────────────────────────────────────────────
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message })
     setTimeout(() => setNotification(null), 5000)
+  }
+
+  const closeActionPanel = () => {
+    setActionClaimId(null)
+    setActionMode(null)
+    setNotes('')
+    setClarificationMessage('')
   }
 
   const submitReview = async (claimId: string, action: 'APPROVE' | 'REJECT') => {
@@ -129,12 +165,40 @@ export default function VerificationQueuePage() {
         return
       }
       showNotification('success', `Claim ${action === 'APPROVE' ? 'approved' : 'rejected'} successfully`)
-      setActionClaimId(null)
-      setNotes('')
-      // Remove reviewed claim from list
+      closeActionPanel()
       setClaims(prev => prev.filter(c => c.id !== claimId))
     } catch {
       showNotification('error', 'Network error — action not saved')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ── Reviewer: request clarification ──────────────────────────────────────
+
+  const submitClarificationRequest = async (claimId: string) => {
+    if (clarificationMessage.trim().length < 10) {
+      showNotification('error', 'Please enter at least 10 characters for the clarification message')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/verification/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claimId, action: 'REQUEST_CLARIFICATION', message: clarificationMessage.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showNotification('error', data.error || 'Failed to request clarification')
+        return
+      }
+      showNotification('success', 'Clarification requested — claimant will be notified')
+      closeActionPanel()
+      // Remove from current tab list (moved to PENDING_CLARIFICATION)
+      setClaims(prev => prev.filter(c => c.id !== claimId))
+    } catch {
+      showNotification('error', 'Network error — request not saved')
     } finally {
       setSubmitting(false)
     }
@@ -152,6 +216,17 @@ export default function VerificationQueuePage() {
   const barColor = (level: string | null) =>
     level === 'HIGH' ? 'bg-emerald-500' : level === 'MEDIUM' ? 'bg-yellow-500' : 'bg-red-500'
 
+  const getStatusBadgeVariant = (status: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    switch (status) {
+      case 'APPROVED': return 'default'
+      case 'REJECTED': return 'destructive'
+      case 'PENDING_CLARIFICATION': return 'outline'
+      default: return 'secondary'
+    }
+  }
+
+  const isActionable = (status: string) => ACTIONABLE_STATUSES.includes(status)
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -159,11 +234,11 @@ export default function VerificationQueuePage() {
       <div className="container mx-auto px-4 py-8">
 
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold text-navy-900 mb-2">{t('verification.verificationQueue')}</h1>
           <p className="text-gray-600">
             {isReviewer
-              ? 'Claims awaiting human review — approve or reject with notes'
+              ? 'Review land claims — approve, reject, or request clarification from claimants'
               : 'Your claims pending AI or human review'}
           </p>
         </div>
@@ -182,13 +257,34 @@ export default function VerificationQueuePage() {
           </div>
         )}
 
+        {/* Status filter tabs — reviewer only */}
+        {isReviewer && (
+          <div className="flex gap-1 mb-6 bg-white/60 backdrop-blur border border-white/20 rounded-xl p-1 shadow-sm overflow-x-auto">
+            {STATUS_TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => { setActiveTab(tab.key); closeActionPanel() }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === tab.key
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Claims list */}
         <div className="backdrop-blur-lg bg-white/60 border border-white/20 rounded-xl shadow-2xl">
           <Card className="border-0 bg-transparent">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-emerald-600" />
-                {isReviewer ? 'Pending Human Review' : t('verification.pendingReview')}
+                {isReviewer
+                  ? (STATUS_TABS.find(t => t.key === activeTab)?.label ?? 'Claims')
+                  : t('verification.pendingReview')}
                 {!loading && ` (${claims.length})`}
               </CardTitle>
             </CardHeader>
@@ -203,7 +299,7 @@ export default function VerificationQueuePage() {
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                   <p className="text-gray-500">
-                    {isReviewer ? 'No claims pending human review' : t('claims.noClaimsFound')}
+                    {isReviewer ? 'No claims in this category' : t('claims.noClaimsFound')}
                   </p>
                 </div>
               ) : (
@@ -214,11 +310,21 @@ export default function VerificationQueuePage() {
                       ? (claim.ai_confidence_score * 100).toFixed(1)
                       : null
                     const isExpanded = actionClaimId === claim.id
+                    const canAct = isReviewer && isActionable(claim.ai_verification_status)
+                    const isPendingClarification = claim.ai_verification_status === 'PENDING_CLARIFICATION'
 
                     return (
                       <div
                         key={claim.id}
-                        className="p-4 border border-blue-200 bg-blue-50/40 rounded-lg hover:shadow-lg transition-all duration-300"
+                        className={`p-4 border rounded-lg hover:shadow-lg transition-all duration-300 ${
+                          isPendingClarification
+                            ? 'border-amber-200 bg-amber-50/40'
+                            : claim.ai_verification_status === 'APPROVED'
+                              ? 'border-emerald-200 bg-emerald-50/30'
+                              : claim.ai_verification_status === 'REJECTED'
+                                ? 'border-red-200 bg-red-50/20'
+                                : 'border-blue-200 bg-blue-50/40'
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
@@ -227,8 +333,10 @@ export default function VerificationQueuePage() {
                               <p className="font-semibold text-navy-900 font-mono text-sm">
                                 {claim.parcel_id_barcode || claim.document_metadata?.ownerName || 'No Parcel ID'}
                               </p>
-                              <Badge variant="default">
-                                {claim.ai_verification_status.replace(/_/g, ' ')}
+                              <Badge variant={getStatusBadgeVariant(claim.ai_verification_status)}>
+                                {claim.ai_verification_status === 'PENDING_CLARIFICATION'
+                                  ? 'Awaiting Claimant'
+                                  : claim.ai_verification_status.replace(/_/g, ' ')}
                               </Badge>
                             </div>
 
@@ -275,8 +383,28 @@ export default function VerificationQueuePage() {
                               </div>
                             )}
 
+                            {/* PENDING_CLARIFICATION — show sent message + response (if any) */}
+                            {isPendingClarification && claim.clarification_message && (
+                              <div className="mt-3 pt-3 border-t border-amber-200">
+                                <p className="text-xs font-medium text-amber-700 mb-1 flex items-center gap-1">
+                                  <HelpCircle className="h-3 w-3" />
+                                  Clarification requested {claim.clarification_requested_at
+                                    ? `on ${new Date(claim.clarification_requested_at).toLocaleDateString()}`
+                                    : ''}
+                                </p>
+                                <p className="text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded p-2 line-clamp-2">
+                                  {claim.clarification_message}
+                                </p>
+                                {claim.clarification_response && (
+                                  <p className="mt-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2 line-clamp-2">
+                                    <span className="font-medium">Response: </span>{claim.clarification_response}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
                             {/* Reviewer: inline approve/reject panel */}
-                            {isReviewer && isExpanded && (
+                            {canAct && isExpanded && actionMode === 'review' && (
                               <div className="mt-3 pt-3 border-t border-blue-200 space-y-3">
                                 <Textarea
                                   placeholder="Add review notes (optional)…"
@@ -285,7 +413,7 @@ export default function VerificationQueuePage() {
                                   rows={3}
                                   className="text-sm"
                                 />
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 flex-wrap">
                                   <Button
                                     size="sm"
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -308,7 +436,42 @@ export default function VerificationQueuePage() {
                                     size="sm"
                                     variant="ghost"
                                     disabled={submitting}
-                                    onClick={() => { setActionClaimId(null); setNotes('') }}
+                                    onClick={closeActionPanel}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Reviewer: inline request clarification panel */}
+                            {canAct && isExpanded && actionMode === 'clarify' && (
+                              <div className="mt-3 pt-3 border-t border-amber-200 space-y-3">
+                                <p className="text-sm text-amber-700 font-medium">
+                                  What information do you need from the claimant?
+                                </p>
+                                <Textarea
+                                  placeholder="Describe what additional documents or information are required… (min 10 characters)"
+                                  value={clarificationMessage}
+                                  onChange={e => setClarificationMessage(e.target.value)}
+                                  rows={4}
+                                  className="text-sm"
+                                />
+                                <div className="flex gap-2 flex-wrap">
+                                  <Button
+                                    size="sm"
+                                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                                    disabled={submitting || clarificationMessage.trim().length < 10}
+                                    onClick={() => submitClarificationRequest(claim.id)}
+                                  >
+                                    {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <HelpCircle className="h-4 w-4 mr-1" />}
+                                    Send Request
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={submitting}
+                                    onClick={closeActionPanel}
                                   >
                                     Cancel
                                   </Button>
@@ -325,14 +488,25 @@ export default function VerificationQueuePage() {
                                 {t('common.view')}
                               </Button>
                             </Link>
-                            {isReviewer && !isExpanded && (
-                              <Button
-                                size="sm"
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                                onClick={() => { setActionClaimId(claim.id); setNotes('') }}
-                              >
-                                Review
-                              </Button>
+                            {canAct && !isExpanded && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                  onClick={() => { setActionClaimId(claim.id); setActionMode('review'); setClarificationMessage('') }}
+                                >
+                                  Review
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                  onClick={() => { setActionClaimId(claim.id); setActionMode('clarify'); setNotes('') }}
+                                >
+                                  <HelpCircle className="h-4 w-4 mr-1" />
+                                  Clarify
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>

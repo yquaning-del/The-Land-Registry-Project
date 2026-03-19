@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendClarificationRequestEmail } from '@/lib/email/sender'
 
 const PLATFORM_OWNER_EMAIL = process.env.PLATFORM_OWNER_EMAIL || ''
 const REVIEWER_ROLES = ['VERIFIER', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_OWNER']
@@ -30,19 +31,82 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { claimId, action, notes } = body as {
+    const { claimId, action, notes, message } = body as {
       claimId: string
-      action: 'APPROVE' | 'REJECT'
+      action: 'APPROVE' | 'REJECT' | 'REQUEST_CLARIFICATION'
       notes?: string
+      message?: string
     }
 
-    if (!claimId || !action || !['APPROVE', 'REJECT'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid request: claimId and action (APPROVE|REJECT) required' }, { status: 400 })
+    if (!claimId || !action || !['APPROVE', 'REJECT', 'REQUEST_CLARIFICATION'].includes(action)) {
+      return NextResponse.json(
+        { error: 'Invalid request: claimId and action (APPROVE|REJECT|REQUEST_CLARIFICATION) required' },
+        { status: 400 }
+      )
     }
 
-    const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+    if (action === 'REQUEST_CLARIFICATION' && (!message || message.trim().length < 10)) {
+      return NextResponse.json(
+        { error: 'A clarification message of at least 10 characters is required' },
+        { status: 400 }
+      )
+    }
 
     const admin = createAdminClient()
+
+    if (action === 'REQUEST_CLARIFICATION') {
+      const { data: updated, error: updateError } = await admin
+        .from('land_claims')
+        .update({
+          ai_verification_status: 'PENDING_CLARIFICATION',
+          clarification_message: message!.trim(),
+          clarification_requested_by: user.id,
+          clarification_requested_at: new Date().toISOString(),
+          clarification_response: null,
+          clarification_responded_at: null,
+        })
+        .eq('id', claimId)
+        .in('ai_verification_status', ['PENDING_HUMAN_REVIEW', 'PENDING_CLARIFICATION'])
+        .select('id, ai_verification_status, claimant_id')
+        .single()
+
+      if (updateError) throw updateError
+      if (!updated) {
+        return NextResponse.json(
+          { error: 'Claim not found or not in a reviewable status' },
+          { status: 404 }
+        )
+      }
+
+      // Fire-and-forget: email the claimant
+      ;(async () => {
+        try {
+          const { data: claimant } = await admin
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', updated.claimant_id)
+            .single()
+          const { data: authUser } = await admin.auth.admin.getUserById(updated.claimant_id)
+          const claimantEmail = authUser?.user?.email
+          if (claimantEmail) {
+            await sendClarificationRequestEmail({
+              claimantEmail,
+              claimantName: claimant?.full_name ?? 'Landowner',
+              claimId,
+              clarificationMessage: message!.trim(),
+            })
+          }
+        } catch (e) {
+          console.error('Failed to send clarification email:', e)
+        }
+      })()
+
+      return NextResponse.json({ claim: updated })
+    }
+
+    // APPROVE or REJECT
+    const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+
     const { data: updated, error: updateError } = await admin
       .from('land_claims')
       .update({

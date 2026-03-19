@@ -633,6 +633,119 @@ export function getEvidencePacketEmail(data: TemplateData): EmailTemplate {
   }
 }
 
+// Clarification Request Email — sent to claimant when verifier requests more info
+export interface ClarificationRequestData {
+  claimantName: string
+  claimId: string
+  clarificationMessage: string
+  dashboardUrl?: string
+}
+
+export function getClarificationRequestEmail(data: ClarificationRequestData): EmailTemplate {
+  const claimUrl = `${baseUrl}/claims/${data.claimId}`
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>${emailStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🛡️ Land Registry</h1>
+          <p>Verification Update</p>
+        </div>
+        <div class="content">
+          <h2>Additional Information Required</h2>
+          <p>Dear ${data.claimantName},</p>
+          <p>A Land Commission reviewer has reviewed your land claim and requires additional information before a decision can be made.</p>
+
+          <div class="warning-box">
+            <strong>Reviewer's Question / Request</strong>
+            <p style="margin-top: 10px; white-space: pre-wrap;">${data.clarificationMessage}</p>
+          </div>
+
+          <p>Please log in to your dashboard and respond to this request. Your claim will return to the review queue once you submit your response.</p>
+
+          <div style="margin-top: 20px;">
+            <a class="button" href="${claimUrl}">Respond to Reviewer</a>
+          </div>
+
+          <p style="color: #64748B; font-size: 13px; margin-top: 20px;">
+            Claim reference: <strong>${data.claimId}</strong>
+          </p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} Land Registry. All rights reserved.</p>
+          <p>${baseUrl}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+
+  return {
+    subject: `Action Required: Clarification Requested for Your Land Claim`,
+    html,
+    text:
+      `Additional Information Required\n\n` +
+      `Dear ${data.claimantName},\n\n` +
+      `A Land Commission reviewer has requested additional information for your claim (${data.claimId}).\n\n` +
+      `Reviewer's request:\n${data.clarificationMessage}\n\n` +
+      `Please respond at: ${claimUrl}`,
+  }
+}
+
+// Clarification Response Email — sent to verifier when claimant submits a response
+export interface ClarificationResponseData {
+  verifierEmail: string
+  claimId: string
+  claimantName: string
+}
+
+export function getClarificationResponseEmail(data: ClarificationResponseData): EmailTemplate {
+  const queueUrl = `${baseUrl}/verification-queue`
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>${emailStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🛡️ Land Registry</h1>
+          <p>Verification Queue</p>
+        </div>
+        <div class="content">
+          <h2>Claimant Has Responded</h2>
+          <p>The claimant <strong>${data.claimantName}</strong> has submitted a response to your clarification request.</p>
+
+          <div class="info-box">
+            <strong>Claim Reference:</strong> ${data.claimId}
+          </div>
+
+          <p>The claim is now back in the <strong>Pending Review</strong> queue, ready for your final decision.</p>
+
+          <div style="margin-top: 20px;">
+            <a class="button" href="${queueUrl}">Open Review Queue</a>
+          </div>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} Land Registry. All rights reserved.</p>
+          <p>${baseUrl}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+
+  return {
+    subject: `Claimant Responded: Land Claim Ready for Review`,
+    html,
+    text:
+      `Claimant Has Responded\n\n` +
+      `${data.claimantName} has responded to your clarification request for claim ${data.claimId}.\n\n` +
+      `The claim is back in the review queue: ${queueUrl}`,
+  }
+}
+
 // Export all templates
 export const emailTemplates = {
   welcome: getWelcomeEmail,
@@ -643,4 +756,6 @@ export const emailTemplates = {
   requestDemo: getRequestDemoEmail,
   conflictAlert: getConflictAlertEmail,
   evidencePacket: getEvidencePacketEmail,
+  clarificationRequest: getClarificationRequestEmail,
+  clarificationResponse: getClarificationResponseEmail,
 }

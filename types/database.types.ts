@@ -10,6 +10,7 @@ export type ClaimStatus =
   | 'PENDING_VERIFICATION'
   | 'AI_VERIFIED'
   | 'PENDING_HUMAN_REVIEW'
+  | 'PENDING_CLARIFICATION'
   | 'APPROVED'
   | 'REJECTED'
   | 'DISPUTED'
@@ -190,6 +191,11 @@ export interface Database {
           surveyor_license_number: string | null
           survey_date: string | null
           lands_commission_file_number: string | null
+          clarification_message: string | null
+          clarification_response: string | null
+          clarification_requested_by: string | null
+          clarification_requested_at: string | null
+          clarification_responded_at: string | null
           created_at: string
           updated_at: string
           deleted_at: string | null
@@ -243,6 +249,11 @@ export interface Database {
           surveyor_license_number?: string | null
           survey_date?: string | null
           lands_commission_file_number?: string | null
+          clarification_message?: string | null
+          clarification_response?: string | null
+          clarification_requested_by?: string | null
+          clarification_requested_at?: string | null
+          clarification_responded_at?: string | null
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
@@ -296,6 +307,11 @@ export interface Database {
           surveyor_license_number?: string | null
           survey_date?: string | null
           lands_commission_file_number?: string | null
+          clarification_message?: string | null
+          clarification_response?: string | null
+          clarification_requested_by?: string | null
+          clarification_requested_at?: string | null
+          clarification_responded_at?: string | null
           created_at?: string
           updated_at?: string
           deleted_at?: string | null

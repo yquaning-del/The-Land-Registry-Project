@@ -1,7 +1,15 @@
 // Email Sender - Ready for integration with Resend, SendGrid, or other providers
 // Currently configured as a placeholder that logs emails in development
 
-import { EmailTemplate, TemplateData, emailTemplates } from './templates'
+import {
+  EmailTemplate,
+  TemplateData,
+  emailTemplates,
+  getClarificationRequestEmail,
+  getClarificationResponseEmail,
+  ClarificationRequestData,
+  ClarificationResponseData,
+} from './templates'
 
 interface SendEmailOptions {
   to: string
@@ -150,3 +158,35 @@ export const sendLowCreditsEmail = (
   to: string,
   data: { userName: string; creditsAmount: number }
 ) => sendEmail({ to, template: 'lowCredits', data })
+
+// Send clarification request to claimant
+export async function sendClarificationRequestEmail(
+  data: ClarificationRequestData & { claimantEmail: string }
+): Promise<SendEmailResult> {
+  const { claimantEmail, ...templateData } = data
+  const content = getClarificationRequestEmail(templateData)
+  if (process.env.NODE_ENV === 'development' || !isEmailConfigured()) {
+    console.log('📧 [CLARIFICATION REQUEST] Email would be sent to:', claimantEmail)
+    console.log('  Subject:', content.subject)
+    console.log('  Message:', templateData.clarificationMessage)
+    return { success: true, messageId: `dev-${Date.now()}` }
+  }
+  if (process.env.RESEND_API_KEY) return sendWithResend(claimantEmail, content)
+  if (process.env.SENDGRID_API_KEY) return sendWithSendGrid(claimantEmail, content)
+  return { success: false, error: 'No email service configured' }
+}
+
+// Send clarification response notification to verifier
+export async function sendClarificationResponseEmail(
+  data: ClarificationResponseData
+): Promise<SendEmailResult> {
+  const content = getClarificationResponseEmail(data)
+  if (process.env.NODE_ENV === 'development' || !isEmailConfigured()) {
+    console.log('📧 [CLARIFICATION RESPONSE] Email would be sent to:', data.verifierEmail)
+    console.log('  Subject:', content.subject)
+    return { success: true, messageId: `dev-${Date.now()}` }
+  }
+  if (process.env.RESEND_API_KEY) return sendWithResend(data.verifierEmail, content)
+  if (process.env.SENDGRID_API_KEY) return sendWithSendGrid(data.verifierEmail, content)
+  return { success: false, error: 'No email service configured' }
+}

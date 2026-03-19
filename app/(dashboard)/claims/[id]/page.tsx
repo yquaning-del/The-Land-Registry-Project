@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
+import { Textarea } from '@/components/ui/textarea'
 import {
   ArrowLeft,
   FileText,
@@ -34,6 +35,8 @@ import {
   ScrollText,
   Ruler,
   Sparkles,
+  HelpCircle,
+  Loader2,
 } from 'lucide-react'
 
 interface ClaimDetails {
@@ -68,6 +71,9 @@ interface ClaimDetails {
   lands_commission_file_number: string | null
   duration_years: number | null
   polygon_coordinates: number[][] | null
+  clarification_message: string | null
+  clarification_response: string | null
+  clarification_responded_at: string | null
   created_at: string
   updated_at: string
   verification_result?: any
@@ -127,6 +133,9 @@ export default function ClaimDetailsPage() {
   const [verificationResult, setVerificationResult] = useState<any>(null)
   const [stageIndex, setStageIndex] = useState(-1)
   const [conflictAlert, setConflictAlert] = useState<string | null>(null)
+  const [clarificationResponse, setClarificationResponse] = useState('')
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false)
+  const [clarificationNotification, setClarificationNotification] = useState<string | null>(null)
 
   useEffect(() => {
     if (params.id) {
@@ -237,6 +246,30 @@ export default function ClaimDetailsPage() {
     }
   }
 
+  const submitClarificationResponse = async () => {
+    if (!claim || clarificationResponse.trim().length < 5) return
+    setClarificationSubmitting(true)
+    try {
+      const res = await fetch(`/api/claims/${claim.id}/clarify`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: clarificationResponse.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setClarificationNotification(data.error || 'Failed to submit response')
+        return
+      }
+      setClarificationNotification('Response submitted — your claim is back in the review queue.')
+      setClarificationResponse('')
+      await loadClaimDetails()
+    } catch {
+      setClarificationNotification('Network error — please try again')
+    } finally {
+      setClarificationSubmitting(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'AI_VERIFIED':
@@ -247,6 +280,8 @@ export default function ClaimDetailsPage() {
         return <Badge className="bg-yellow-500"><Clock className="h-3 w-3 mr-1" /> Pending</Badge>
       case 'PENDING_HUMAN_REVIEW':
         return <Badge className="bg-blue-500"><User className="h-3 w-3 mr-1" /> Human Review</Badge>
+      case 'PENDING_CLARIFICATION':
+        return <Badge className="bg-amber-500"><HelpCircle className="h-3 w-3 mr-1" /> Clarification Needed</Badge>
       case 'REJECTED':
         return <Badge className="bg-red-500"><XCircle className="h-3 w-3 mr-1" /> Rejected</Badge>
       case 'DISPUTED':
@@ -409,6 +444,52 @@ export default function ClaimDetailsPage() {
               <p className="text-sm text-orange-200 mt-1">{conflictAlert}</p>
             </div>
             <button onClick={() => setConflictAlert(null)} className="text-orange-400 hover:text-orange-200 text-lg leading-none">✕</button>
+          </div>
+        )}
+
+        {/* Clarification requested banner (claimant view) */}
+        {claim.ai_verification_status === 'PENDING_CLARIFICATION' && claim.clarification_message && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3">
+            <div className="flex gap-3 items-start">
+              <HelpCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-amber-800">A reviewer has requested clarification</p>
+                <blockquote className="mt-2 pl-3 border-l-4 border-amber-300 text-sm text-gray-700 whitespace-pre-wrap">
+                  {claim.clarification_message}
+                </blockquote>
+              </div>
+            </div>
+            {!claim.clarification_response && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Type your response here… (min 5 characters)"
+                  value={clarificationResponse}
+                  onChange={e => setClarificationResponse(e.target.value)}
+                  rows={4}
+                  className="text-sm"
+                />
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={submitClarificationResponse}
+                    disabled={clarificationSubmitting || clarificationResponse.trim().length < 5}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-medium rounded-md transition-colors"
+                  >
+                    {clarificationSubmitting
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
+                      : 'Submit Response'}
+                  </button>
+                  {clarificationNotification && (
+                    <p className="text-sm text-gray-600">{clarificationNotification}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {claim.clarification_response && (
+              <div className="pl-3 border-l-4 border-emerald-300">
+                <p className="text-xs font-medium text-emerald-700 mb-1">Your response (submitted):</p>
+                <p className="text-sm text-gray-700">{claim.clarification_response}</p>
+              </div>
+            )}
           </div>
         )}
 
