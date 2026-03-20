@@ -746,7 +746,10 @@ export function getClarificationResponseEmail(data: ClarificationResponseData): 
   }
 }
 
-// Export all templates
+// Export standard templates (all take TemplateData).
+// Clarification templates (getClarificationRequestEmail / getClarificationResponseEmail)
+// are called directly by their dedicated sender helpers and are intentionally
+// excluded here so the generic sendEmail() dispatcher stays well-typed.
 export const emailTemplates = {
   welcome: getWelcomeEmail,
   verificationComplete: getVerificationCompleteEmail,
@@ -756,6 +759,4 @@ export const emailTemplates = {
   requestDemo: getRequestDemoEmail,
   conflictAlert: getConflictAlertEmail,
   evidencePacket: getEvidencePacketEmail,
-  clarificationRequest: getClarificationRequestEmail,
-  clarificationResponse: getClarificationResponseEmail,
 }
